@@ -51,7 +51,7 @@ All six steps are implemented (steps 1–3 in M2, steps 4–6 in M3).
 1. `EventPoller` asks each enabled `EventSource` for events at the source's interval (or an admin publishes one through `POST /api/admin/events`). Both paths call `EventIngestionService.ingest`.
 2. The event is stored once: a repeat with the same `(source, externalId)` is skipped, and a unique constraint backs this up in the database.
 3. `AlertRuleRepository.findEnabledByCategory` loads the enabled rules for the event's category; `AlertMatcher` keeps those whose minimum severity is at or below the event's severity and whose keywords (if any) appear in the title or description. If any match, a `WorldEventMatched(eventId, alertRuleIds)` application event is published.
-4. After the ingestion transaction commits, `DeliveryDispatcher` receives `WorldEventMatched`. For every target of every matched rule it formats the message (`NotificationFormatter`) and creates a `PENDING` row in the delivery log. If a row for the same (event, rule, channel type, address) already exists, that target is skipped: this is the de-duplication.
+4. After the ingestion transaction has completed and returned its database connection, `DeliveryDispatcher` receives `WorldEventMatched`. For every target of every matched rule it formats the message (`NotificationFormatter`) and creates a `PENDING` row in the delivery log. If a row for the same (event, rule, channel type, address) already exists, that target is skipped: this is the de-duplication.
 5. If the admin switched the channel off, the delivery becomes `SKIPPED`. Otherwise the `NotificationChannel` for the target's type sends it (SMTP for email, HTTP POST for Slack). A failure is retried: up to 3 attempts, waiting 1 s, then 2 s.
 6. The outcome (`SENT` or `FAILED`, attempts, last error) is saved on the same row, which also holds the exact subject and body. Users see these rows as their notification history, admins as the delivery log.
 
@@ -62,7 +62,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant C as NotificationChannel
     I->>DB: store event (transaction 1)
-    I-->>D: WorldEventMatched (after commit)
+    I-->>D: WorldEventMatched (after the transaction, connection returned)
     D->>DB: load event and matched rules (new read-only tx)
     loop each rule × target
         D->>DB: delivery exists? else insert PENDING (new tx, unique key)
@@ -77,7 +77,7 @@ sequenceDiagram
     end
 ```
 
-Every database step runs in its own short transaction and no transaction is open during a network call ([`decisions.md`](decisions.md) ADR-023). Dispatch is synchronous: the thread that ingested the event also sends the notifications ([`tradeoffs.md`](tradeoffs.md) T19).
+Every database step runs in its own short transaction and no transaction or connection is held during a network call, so a delivery uses at most one database connection at a time ([`decisions.md`](decisions.md) ADR-023; this was not true in the first M3 version, see [`review-log.md`](review-log.md) R7). Dispatch is synchronous: the thread that ingested the event also sends the notifications ([`tradeoffs.md`](tradeoffs.md) T19).
 
 ## Implemented so far (M1–M3)
 
@@ -128,13 +128,13 @@ Interactive documentation: Swagger UI at `/swagger-ui.html`, OpenAPI JSON at `/v
 
 Errors use RFC 9457 problem details (`application/problem+json`) everywhere, including Spring's own errors such as malformed JSON or an out-of-range query parameter: 400 with an `errors` list for body validation failures, 400 for an address that does not fit its channel, 404 for unknown users or rules.
 
-Validation rules: name required (≤ 100 chars); at least one category; at most 20 keywords; minimum severity required; 1–10 targets. An `EMAIL` target must look like an email address; a `SLACK` target must be an `http(s)` URL (plain `http` is allowed for the local Slack stand-in). Keywords are trimmed, lower-cased and de-duplicated.
+Validation rules: at most 50 rules per user (`ALERTS_MAX_RULES_PER_USER`, ADR-029); name required (≤ 100 chars); at least one category; at most 20 keywords; minimum severity required; 1–10 targets. An `EMAIL` target must look like an email address; a `SLACK` target must be an `http(s)` URL (plain `http` is allowed for the local Slack stand-in). Keywords are trimmed, lower-cased and de-duplicated.
 
 ### Event sources
 
 | Source | Default | Interval | What it produces |
 |--------|---------|----------|------------------|
-| `SimulatedEventSource` (`SIMULATOR`) | on | 30 s | one random event from a 12-entry catalog that covers every category × severity, labelled `[SIMULATED]` |
+| `SimulatedEventSource` (`SIMULATOR`) | on | 15 s | one random event from a 12-entry catalog that covers every category × severity, labelled `[SIMULATED]` |
 | `UsgsEarthquakeSource` (`USGS`) | off | 5 min | real earthquakes from the USGS 4.5+ past-day GeoJSON feed; severity from magnitude: < 5 LOW, < 6 MEDIUM, < 7 HIGH, ≥ 7 CRITICAL |
 | Admin API (`ADMIN`) | always | on demand | whatever the admin publishes |
 
@@ -250,12 +250,12 @@ Flyway owns the schema; Hibernate runs with `ddl-auto: validate`, so the app ref
 |------------|------|----------------|
 | `SeverityTest` | unit | severity ranking |
 | `ChannelTargetValidatorTest` | unit (parameterized) | valid and invalid email addresses and webhook URLs (scheme case, missing host) |
-| `AlertRuleServiceTest` | unit, Mockito | normalization, defaults, unknown user (create and list), bad target, update replaces collections, update/delete of missing rule, delete |
+| `AlertRuleServiceTest` | unit, Mockito | normalization, defaults, unknown user (create and list), bad target, update replaces collections, update/delete of missing rule, delete, rule limit per user |
 | `AlertRuleControllerTest` | `@WebMvcTest` | status codes, `Location` header, every request constraint, malformed JSON, business-rule 400 and 404 problem details, ISO timestamps |
-| `AlertApiIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL | Flyway migrations, seeded users, full create/read/update/delete cycle with timestamps, per-user isolation, invalid target not stored, no orphan rows after delete, OpenAPI document |
+| `AlertApiIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL | Flyway migrations, seeded users, full create/read/update/delete cycle with timestamps, per-user isolation, invalid target not stored, no orphan rows after delete, OpenAPI document, limit of 50 rules per user (shipped default) |
 | `AlertMatcherTest` | unit (parameterized) | every matching rule: category, severity boundaries, keyword case and substring, title or description, empty keywords, disabled rule |
 | `WorldEventTest` | unit | default and truncated `occurredAt`, searchable text |
-| `EventIngestionServiceTest` | unit, Mockito, real matcher | duplicates skipped before saving, no duplicate check without external id, only fitting rules announced, nothing announced without a match |
+| `EventIngestionServiceTest` | unit, Mockito, real matcher | duplicates skipped before saving, no duplicate check without external id, only fitting rules announced, nothing announced without a match, match announced only after the transaction has committed |
 | `SimulatedEventSourceTest` | unit | catalog covers all 12 category × severity pairs, one labelled event per poll, unique ids, seed gives repeatable output |
 | `UsgsEarthquakeSourceTest` | unit, `MockRestServiceServer`, fixture from the real feed | field mapping, title fallback, tsunami flag, skipped incomplete features, empty feeds, server error, magnitude → severity boundaries |
 | `EventPollerTest` | unit, Mockito | failing source does not stop polling, one bad event does not stop the batch, duplicates not counted, each source scheduled at its own interval |
@@ -264,14 +264,16 @@ Flyway owns the schema; Hibernate runs with `ddl-auto: validate`, so the app ref
 | `EventIngestionIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL | admin event matches exactly the fitting rules (each other rule fails on one criterion) and `WorldEventMatched` is published, duplicates stored once, unique constraint, simulator events fit the schema, newest-first listing |
 | `NotificationFormatterTest` | unit | subject with severity and category, every detail in the body, no empty lines when description or URL are missing |
 | `EmailChannelTest` | unit, Mockito | recipient, sender, subject and body of the mail; SMTP failure becomes a `DeliveryException` |
+| `EmailTimeoutTest` | `ApplicationContextRunner` with the real `application.yaml`, a socket that never answers | the shipped SMTP timeouts are set, and a send to a silent server fails instead of hanging |
 | `SlackChannelTest` | unit, `MockRestServiceServer` | POST to the webhook URL with the exact JSON body; an HTTP error becomes a `DeliveryException` (the integration test checks the status and body in the logged error) |
 | `ChannelSettingServiceTest` | unit, Mockito | missing setting counts as on, switching on and off, `implemented` flag |
 | `ChannelControllerTest` | `@WebMvcTest` | list and switch channels, unknown type and missing `enabled` as problem details |
 | `DeliveryDispatcherTest` | unit, fake channel | one delivery per target, existing delivery not sent again, concurrent insert treated as duplicate, retry with exact back-off waits until success, `FAILED` after the last attempt, error without message, `SKIPPED` when off, no implementation, rule or event deleted since matching, interrupted retries, over-long error cut to fit |
 | `DeliveryControllerTest` | `@WebMvcTest` | notification history and delivery log, status filter, `limit` bounds, unknown user 404 |
 | `DeliveryIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL, Mailpit, WireMock | the email arrives in Mailpit and the Slack POST reaches WireMock; the same source event received twice notifies once; a broken webhook is tried 3 times then `FAILED` while the email still goes out; switched-off channel is `SKIPPED` and nothing is sent; history kept after the rule is deleted |
+| `DeliveryConcurrencyIntegrationTest` | `@SpringBootTest` + Testcontainers, connection pool of 2 | 4 events ingested in parallel with a slow (1 s) Slack stand-in are all stored and delivered; regression test for the pool starvation found in the M3 review |
 
-138 tests; line coverage 99.6% (566/568), branch coverage 99.1% (114/115) (JaCoCo). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
+145 tests; line coverage 99.7% (573/575), branch coverage 99.1% (116/117) (JaCoCo). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
 
 ## Domain model (full target; ✅ = implemented)
 

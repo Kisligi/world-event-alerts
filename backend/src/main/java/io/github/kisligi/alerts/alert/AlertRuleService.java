@@ -5,9 +5,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import io.github.kisligi.alerts.common.InvalidRequestException;
 import io.github.kisligi.alerts.common.NotFoundException;
 import io.github.kisligi.alerts.user.AppUser;
 import io.github.kisligi.alerts.user.AppUserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,12 +21,15 @@ public class AlertRuleService {
     private final AlertRuleRepository rules;
     private final AppUserRepository users;
     private final ChannelTargetValidator targetValidator;
+    private final int maxRulesPerUser;
 
     public AlertRuleService(AlertRuleRepository rules, AppUserRepository users,
-                            ChannelTargetValidator targetValidator) {
+                            ChannelTargetValidator targetValidator,
+                            @Value("${alerts.rules.max-per-user:50}") int maxRulesPerUser) {
         this.rules = rules;
         this.users = users;
         this.targetValidator = targetValidator;
+        this.maxRulesPerUser = maxRulesPerUser;
     }
 
     @Transactional(readOnly = true)
@@ -41,7 +46,15 @@ public class AlertRuleService {
     }
 
     public AlertRuleResponse create(Long userId, AlertRuleRequest request) {
-        AlertRule rule = new AlertRule(requireUser(userId));
+        AppUser user = requireUser(userId);
+        // Every event loads all enabled rules of its category, so the number of rules must stay
+        // bounded; without login anyone could otherwise create them in a loop (review-log R7).
+        // Two parallel requests can still end one above the cap, which is harmless.
+        if (rules.countByUserId(userId) >= maxRulesPerUser) {
+            throw new InvalidRequestException(
+                    "User " + userId + " already has the maximum of " + maxRulesPerUser + " alert rules");
+        }
+        AlertRule rule = new AlertRule(user);
         apply(rule, request);
         return AlertRuleResponse.from(rules.save(rule));
     }

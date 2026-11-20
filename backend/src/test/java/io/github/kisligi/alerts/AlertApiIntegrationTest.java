@@ -140,6 +140,23 @@ class AlertApiIntegrationTest {
     }
 
     @Test
+    void ruleLimitPerUserIsEnforcedWithTheShippedDefault() throws Exception {
+        for (int i = 1; i <= 50; i++) {
+            mvc.perform(post("/api/users/2/alerts").contentType(MediaType.APPLICATION_JSON).content(BOB_RULE))
+                    .andExpect(status().isCreated());
+        }
+
+        mvc.perform(post("/api/users/2/alerts").contentType(MediaType.APPLICATION_JSON).content(BOB_RULE))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("User 2 already has the maximum of 50 alert rules"));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM alert_rule WHERE user_id = 2", Integer.class))
+                .isEqualTo(50);
+        // The limit is per user: others are not affected.
+        mvc.perform(post("/api/users/1/alerts").contentType(MediaType.APPLICATION_JSON).content(BOB_RULE))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void unknownUserIs404() throws Exception {
         mvc.perform(get("/api/users/999/alerts"))
                 .andExpect(status().isNotFound())

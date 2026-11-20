@@ -56,7 +56,7 @@ cd backend && ./mvnw spring-boot:test-run
 Then open:
 - Swagger UI: http://localhost:8080/swagger-ui.html ([screenshot](docs/screenshots/m3-swagger-ui.png))
 - Demo users: http://localhost:8080/api/users
-- Latest events (a simulated one arrives every 30 seconds): http://localhost:8080/api/events
+- Latest events (a simulated one arrives every 15 seconds): http://localhost:8080/api/events
 - Sent emails (Mailpit inbox): http://localhost:8025 ([screenshot](docs/screenshots/m3-mailpit-email.png))
 - Slack messages received by the stand-in (WireMock): http://localhost:8089/__admin/requests
 - Delivery log: http://localhost:8080/api/admin/deliveries
@@ -87,7 +87,7 @@ curl -X POST localhost:8080/api/admin/events -H 'Content-Type: application/json'
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `ALERTS_SIMULATOR_ENABLED` | `true` | Sample news, market and disaster events, labelled `[SIMULATED]` |
-| `ALERTS_SIMULATOR_INTERVAL` | `30s` | Time between simulated events |
+| `ALERTS_SIMULATOR_INTERVAL` | `15s` | Time between simulated events |
 | `ALERTS_USGS_ENABLED` | `false` | Real earthquakes (magnitude 4.5+, past day) from the public USGS feed; needs internet, no API key |
 | `ALERTS_USGS_INTERVAL` | `5m` | Time between USGS polls |
 
@@ -101,6 +101,7 @@ To see retries and a failed delivery, use a Slack target under `/services/fail/`
 | `ALERTS_EMAIL_FROM` | `World Event Alerts <alerts@example.com>` | Sender of alert emails |
 | `ALERTS_DELIVERY_MAX_ATTEMPTS` | `3` | Attempts per notification |
 | `ALERTS_DELIVERY_INITIAL_BACKOFF` | `1s` | Wait before the 2nd attempt; doubled for each further one |
+| `ALERTS_MAX_RULES_PER_USER` | `50` | Upper limit on alert rules per user |
 
 ## How to test
 
@@ -108,7 +109,7 @@ To see retries and a failed delivery, use a Slack target under `/services/fail/`
 cd backend && ./mvnw verify
 ```
 
-Runs unit tests, web-layer tests and integration tests (138 tests). The integration tests start real PostgreSQL, Mailpit and WireMock containers with Testcontainers, so **Docker must be running**. A coverage report is written to `backend/target/site/jacoco/index.html`. Testing rules: [`docs/process.md`](docs/process.md#testing-standard).
+Runs unit tests, web-layer tests and integration tests (145 tests). The integration tests start real PostgreSQL, Mailpit and WireMock containers with Testcontainers, so **Docker must be running**. A coverage report is written to `backend/target/site/jacoco/index.html`. Testing rules: [`docs/process.md`](docs/process.md#testing-standard).
 
 ## Milestones
 

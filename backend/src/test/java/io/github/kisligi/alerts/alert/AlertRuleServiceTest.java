@@ -34,11 +34,33 @@ class AlertRuleServiceTest {
     @Mock
     private AppUserRepository users;
 
+    private static final int MAX_RULES = 3;
+
     private AlertRuleService service;
 
     @BeforeEach
     void setUp() {
-        service = new AlertRuleService(rules, users, new ChannelTargetValidator());
+        service = new AlertRuleService(rules, users, new ChannelTargetValidator(), MAX_RULES);
+    }
+
+    @Test
+    void userAtTheRuleLimitCannotCreateAnother() {
+        when(users.findById(1L)).thenReturn(Optional.of(new AppUser("Alice", "alice@example.com")));
+        when(rules.countByUserId(1L)).thenReturn((long) MAX_RULES);
+
+        assertThatThrownBy(() -> service.create(1L, validRequest()))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("User 1 already has the maximum of 3 alert rules");
+        verify(rules, never()).save(any());
+    }
+
+    @Test
+    void userJustBelowTheRuleLimitCanCreateOneMore() {
+        when(users.findById(1L)).thenReturn(Optional.of(new AppUser("Alice", "alice@example.com")));
+        when(rules.countByUserId(1L)).thenReturn((long) MAX_RULES - 1);
+        when(rules.save(any(AlertRule.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.create(1L, validRequest()).name()).isNotBlank();
     }
 
     @Test

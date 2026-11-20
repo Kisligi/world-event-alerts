@@ -19,6 +19,12 @@ spring:
   mail:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}
+    # Jakarta Mail waits forever by default; a hung mail server would block delivery
+    # (and with it event polling) indefinitely. Values in milliseconds.
+    properties:
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 10000
+      "[mail.smtp.writetimeout]": 10000
 
 springdoc:
   swagger-ui:
@@ -36,11 +42,14 @@ alerts:
     polling-enabled: ${ALERTS_POLLING_ENABLED:true}
     simulator:
       enabled: ${ALERTS_SIMULATOR_ENABLED:true}
-      interval: ${ALERTS_SIMULATOR_INTERVAL:30s}
+      interval: ${ALERTS_SIMULATOR_INTERVAL:15s}
     usgs:
       enabled: ${ALERTS_USGS_ENABLED:false}
       interval: ${ALERTS_USGS_INTERVAL:5m}
       feed-url: ${ALERTS_USGS_FEED_URL:https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson}
+  # Upper limit on alert rules per user: matching loads all rules of a category per event.
+  rules:
+    max-per-user: ${ALERTS_MAX_RULES_PER_USER:50}
   channels:
     email:
       from: ${ALERTS_EMAIL_FROM:World Event Alerts <alerts@example.com>}

@@ -60,9 +60,11 @@ public class DeliveryDispatcher {
         this.formatter = formatter;
         this.properties = properties;
         this.sleeper = sleeper;
-        // This runs after the ingestion transaction has committed. Its resources can still be
-        // bound to the thread, so plain repository calls would join that finished transaction
-        // and never commit. Every step therefore runs in its own new transaction.
+        // Every step runs in its own short transaction, and none is open during a network call,
+        // so a delivery holds at most one database connection, and only briefly (ADR-023).
+        // REQUIRES_NEW keeps this true even if the announcement is ever published inside a
+        // transaction: after commit, that transaction's resources can still be bound to the
+        // thread, and plain repository calls would join it and never commit.
         this.readTx = new TransactionTemplate(transactionTemplate.getTransactionManager());
         this.readTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.readTx.setReadOnly(true);

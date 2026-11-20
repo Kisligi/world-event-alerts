@@ -110,3 +110,26 @@ Still uncovered, on purpose:
   - A simulated CRITICAL earthquake also reached Alice's inbox on its own, so the simulator → matching → delivery path works without the admin endpoint.
   - `GET /api/users/99/notifications` → 404 problem detail. [Swagger screenshot](screenshots/m3-swagger-ui.png).
 - **Observed and recorded as a trade-off:** with the broken webhook, `POST /api/admin/events` took 3.1 s instead of ~60 ms, because the retries run on the request thread (T19).
+
+**Review round (14:07, [`review-log.md`](review-log.md) R7)**
+
+Treefa asked for a 15 s simulator interval and a review for memory leaks and out-of-memory risks, to be discussed before fixing.
+
+*How the review was done:* read every class for state that can grow (static or instance collections, caches, ThreadLocals, listeners), for unbounded queries and for unbounded inputs; then ran the packaged app with metrics enabled and sent 12 admin events at once to a rule whose Slack webhook always fails.
+
+*No leak found:* the app has no static caches and no growing collections. Each event and each delivery step uses its own short transaction, so Hibernate's session never accumulates entities. Event and delivery lists are limited in SQL. The poller schedules with a fixed delay, so slow polls cannot pile up. Heap stayed at about 70 MB.
+
+*Found and fixed (Treefa chose fixes 1–3 on a decision card):*
+
+| # | Finding | Evidence | Fix | Test |
+|---|---------|----------|-----|------|
+| 1 | **Connection pool starvation.** The after-commit listener ran before the ingestion transaction released its connection, and each delivery step borrowed a second one | 12 parallel events: all 10 connections busy for 30 s, 2 requests failed with 500, only 3 of 10 stored events got a delivery | Publish `WorldEventMatched` after the transaction has completed (ADR-023 amended) | `DeliveryConcurrencyIntegrationTest` (pool of 2, 4 parallel events, 1 s webhook): failed with "Connection is not available" before the fix, passes after it; `EventIngestionServiceTest` checks commit happens before the announcement |
+| 2 | **No SMTP timeouts** | A send to a socket that accepts but never answers was still hanging after 20 s | Connect 5 s, read 10 s, write 10 s (ADR-027 amended) | `EmailTimeoutTest`: shipped values are set; with a 0.5 s timeout a send to a silent server fails fast, proving the property names work |
+| 3 | **No limit on rules per user**, so memory per event was unbounded | Code reading: matching loads every enabled rule of the category | At most 50 rules per user, configurable (ADR-029) | `AlertRuleServiceTest` (at and just below the limit), `AlertApiIntegrationTest` (51st rule → 400 with the shipped default, other users unaffected) |
+
+*Load check repeated after the fixes:* the same 12 parallel events all returned 201 in about 3.4 s (the retry waits, T19). All 12 deliveries were recorded as `FAILED` after 3 attempts, as expected for the broken webhook. There were no pool errors, and 0 connections were in use while the deliveries waited.
+
+*Recorded, not fixed:* request body size (T25); unbounded table growth and container memory settings for M6 (T26, T18).
+
+**Coverage after the review round:** 145 tests. Lines **99.7%** (573/575), branches **99.1%** (116/117); the same two intentional gaps.
+

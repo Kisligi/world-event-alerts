@@ -10,6 +10,8 @@ public interface AlertRuleRepository extends JpaRepository<AlertRule, Long> {
 
     List<AlertRule> findAllByUserIdOrderByIdAsc(Long userId);
 
+    long countByUserId(Long userId);
+
     /**
      * Pre-filter for matching: enabled rules that listen to the category. Severity and keywords
      * are checked in Java by {@code AlertMatcher}, which keeps the rule logic in one place.

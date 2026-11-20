@@ -21,7 +21,7 @@ class EventSourceConfigTest {
         runner.run(context -> {
             assertThat(context).hasSingleBean(SimulatedEventSource.class);
             assertThat(context).doesNotHaveBean(UsgsEarthquakeSource.class);
-            assertThat(context.getBean(SimulatedEventSource.class).pollInterval()).isEqualTo(Duration.ofSeconds(30));
+            assertThat(context.getBean(SimulatedEventSource.class).pollInterval()).isEqualTo(Duration.ofSeconds(15));
             assertThat(context.getBean(EventSourceProperties.class).usgs().feedUrl())
                     .isEqualTo(URI.create("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson"));
         });

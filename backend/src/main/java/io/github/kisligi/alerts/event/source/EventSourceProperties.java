@@ -18,7 +18,7 @@ public record EventSourceProperties(
 
     public record Simulator(
             @DefaultValue("true") boolean enabled,
-            @DefaultValue("30s") Duration interval) {
+            @DefaultValue("15s") Duration interval) {
     }
 
     public record Usgs(

@@ -153,6 +153,7 @@ Decisions below were made by Claude during implementation, within the approved s
 - **Decision:** `DeliveryDispatcher` listens with `@TransactionalEventListener(fallbackExecution = true)`, so it runs after the ingestion transaction commits (or immediately when there is none). Reading the plan, creating a delivery and saving its outcome each run in a new transaction (`REQUIRES_NEW`). Network calls happen outside any transaction.
 - **Alternatives:** plain `@EventListener` inside the ingestion transaction; one transaction around the whole dispatch.
 - **Why:** An event that rolls back never notifies anyone. No database transaction or connection is held while waiting for SMTP, Slack or retry back-off. `REQUIRES_NEW` is required, not a style choice: after commit, the finished transaction's resources are still bound to the thread, and a plain repository call would join it and silently never commit. Spring's documentation recommends `REQUIRES_NEW` for this; `DeliveryIntegrationTest` confirms the rows are committed ([`dev-journal.md`](dev-journal.md)).
+- **Amended (M3 review, [`review-log.md`](review-log.md) R7):** the claim "no connection is held while waiting" was wrong. An after-commit listener runs *before* the finished transaction releases its connection, so every delivery held the ingestion's connection for its whole duration and borrowed a second one for each step. Ten concurrent deliveries (the pool size) blocked each other for 30 s and notifications were lost. `EventIngestionService` now stores and matches in a transaction and publishes `WorldEventMatched` only after that transaction has completed, so a delivery holds at most one connection, only during a database step. `DeliveryConcurrencyIntegrationTest` reproduces the problem (pool of 2, 4 parallel events, slow webhook); it failed before the change and passes after it. The listener and `REQUIRES_NEW` are kept, so the dispatcher stays correct if the announcement is ever published inside a transaction.
 
 ## ADR-024 — Synchronous dispatch with in-memory retries (M3)
 
@@ -174,8 +175,15 @@ Decisions below were made by Claude during implementation, within the approved s
 
 - **Decision:** All `RestClient`s (Slack, USGS) use the JDK `HttpClient` forced to HTTP/1.1, with a 5 s connect timeout and a 10 s read timeout (`HttpClientConfig`).
 - **Why:** With defaults, the JDK client tried to upgrade plain-`http` connections to HTTP/2 (h2c) and the WireMock Slack stand-in reset the stream, so every Slack message failed with "Received RST_STREAM: Stream cancelled". Slack webhooks do not need HTTP/2. Timeouts were missing too: a hanging webhook would have blocked delivery indefinitely (T19 makes that worse, not better).
+- **Amended (M3 review, R7):** SMTP gets timeouts too: 5 s to connect, 10 s to read and 10 s to write (`spring.mail.properties.mail.smtp.*` in `application.yaml`). Jakarta Mail waits forever by default; a check against a server that accepts connections but never answers was still hanging after 20 s. With delivery on the polling thread, one hung mail server would have stopped every event source. `EmailTimeoutTest` checks both the shipped values and that the property names really take effect.
 
 ## ADR-028 — Local stand-ins: Mailpit and WireMock, shared by tests and compose (M3)
 
 - **Decision:** Email goes over SMTP to Mailpit (`axllent/mailpit:v1.34.0`); Slack webhooks go to WireMock (`wiremock/wiremock:3.13.2`). The WireMock stubs live in `infra/wiremock/mappings/` and are used both by `compose.yaml` and by the Testcontainers setup in the tests. `/services/...` returns 200; `/services/fail/...` returns 500 to show retries.
 - **Why:** The app talks to them exactly as it would to a real SMTP server and real Slack, with no code switches; only configuration differs. One mapping file means tests and the manual demo behave the same. Image versions are pinned for repeatable runs.
+
+## ADR-029 — At most 50 alert rules per user (M3 review)
+
+- **Decision:** Creating a rule fails with 400 once the user has `alerts.rules.max-per-user` rules (default 50, env `ALERTS_MAX_RULES_PER_USER`).
+- **Alternatives:** no limit; stream or page rules during matching; match in SQL.
+- **Why:** Every event loads all enabled rules of its category into memory, and delivery plans one message per matched target, so memory per event grows with the total number of rules. Without login (T3) anyone could create rules in a loop. A cap keeps the worst case bounded (users × 50 rules × 10 targets) for the cost of one `COUNT` query. Matching at scale is still [`tradeoffs.md`](tradeoffs.md) T13. Found in the memory review ([`review-log.md`](review-log.md) R7).

@@ -2,6 +2,8 @@ package io.github.kisligi.alerts.event;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -19,10 +21,14 @@ import io.github.kisligi.alerts.user.AppUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class EventIngestionServiceTest {
@@ -36,12 +42,16 @@ class EventIngestionServiceTest {
     @Mock
     private ApplicationEventPublisher publisher;
 
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
     private EventIngestionService service;
 
     @BeforeEach
     void setUp() {
         // The real matcher: these tests check that ingestion applies it, not a stub.
-        service = new EventIngestionService(events, rules, new AlertMatcher(), publisher);
+        service = new EventIngestionService(events, rules, new AlertMatcher(), publisher,
+                new TransactionTemplate(transactionManager));
     }
 
     @Test
@@ -83,6 +93,24 @@ class EventIngestionServiceTest {
         assertThat(result.event().title()).isEqualTo("M 6.5 earthquake");
         assertThat(result.matchedAlertRuleIds()).containsExactly(11L, 12L);
         verify(publisher).publishEvent(new WorldEventMatched(null, List.of(11L, 12L)));
+    }
+
+    @Test
+    void matchIsAnnouncedOnlyAfterTheTransactionHasCommitted() {
+        // Delivery listens for the announcement and makes slow network calls. It must not run
+        // while this transaction still holds its database connection (review-log R7).
+        TransactionStatus status = mock(TransactionStatus.class);
+        when(transactionManager.getTransaction(any())).thenReturn(status);
+        when(events.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(rules.findEnabledByCategory(EventCategory.DISASTER)).thenReturn(List.of(rule(5L, Severity.LOW, Set.of())));
+
+        service.ingest(incoming("USGS", "us4", Severity.HIGH, "Quake"));
+
+        InOrder order = inOrder(events, transactionManager, publisher);
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(events).save(any());
+        order.verify(transactionManager).commit(status);
+        order.verify(publisher).publishEvent(new WorldEventMatched(null, List.of(5L)));
     }
 
     @Test

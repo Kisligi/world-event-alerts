@@ -185,3 +185,24 @@ Spring Boot line: **Spring Boot 4.1.3**.
 > Approve.
 
 **Response:** fast-forwarded `main` to `0d86f82` (no new commit) and pushed. Implemented milestone M3 (channels, delivery, delivery log) on the `m3-review` branch. See [`dev-journal.md`](dev-journal.md).
+
+---
+
+## Prompt 16 — Treefa, 13:37 (approval to push the M3 review branch)
+
+> Alright, approve for m3-review.
+
+**Response:** committed M3 as `b49ad15` on `m3-review` and pushed it; `main` stayed at `0d86f82`.
+
+---
+
+## Prompt 17 — Treefa, 14:07 (M3 review)
+
+> The local test was successful. Change `ALERTS_SIMULATOR_INTERVAL` from 30 to 15. Before I approve: Review the whole project and look for any potential memory leaks or out-of-memory issues. Fix them if needed, but let's discuss them first.
+
+**Response:** changed the default interval to 15 s, reviewed the backend, ran a concurrency check, and presented five findings with a decision card. Logged as [`review-log.md`](review-log.md) R7.
+
+Decision card, 14:18 — "Which memory and resource findings should I fix on m3-review?" Options: *Fix 1-3, document 4-5* (recommended) · *Fix 1-4, document 5* · *Async dispatch, plus 2-3* · *Document only*. Treefa chose **Fix 1-3, document 4-5**.
+
+**Response:** fixed findings 1–3 with tests and recorded 4–5 as trade-offs T25 and T26. See [`dev-journal.md`](dev-journal.md).
+

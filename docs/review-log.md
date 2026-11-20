@@ -47,3 +47,16 @@ Times are UTC on 2026-11-20.
 - **Treefa changed:** "For every change, make sure you write meaningful tests and aim for as much test coverage as possible. But it's very important that these are real, meaningful tests, not ones written just to increase coverage. (For example, right now there's no test that covers the call to "handleInvalid".)"
 - **Why:** coverage gaps hide untested behaviour; coverage-only tests give false confidence.
 - **Effect:** added JaCoCo reporting and 20 tests for behaviour that was not checked, including the `handleInvalid` path at the web layer and end to end. One new test found a real bug: timestamps returned right after saving had nanosecond precision, but PostgreSQL stores microseconds, so the same rule later showed a different `createdAt`. Fixed. Line coverage 97.1% → 98.9%, branch 88.9% → 96.3%. Testing standard added to [`process.md`](process.md); details in [`dev-journal.md`](dev-journal.md).
+
+## R7 — 14:07 — Simulator interval and a memory review before approving M3
+
+- **Claude proposed:** M3 on `m3-review` (`b49ad15`), with the simulator emitting an event every 30 s.
+- **Treefa changed:** "Change `ALERTS_SIMULATOR_INTERVAL` from 30 to 15. Before I approve: Review the whole project and look for any potential memory leaks or out-of-memory issues. Fix them if needed, but let's discuss them first."
+- **Why:** a livelier demo; and to make sure the service can run for a long time and under load before it reaches `main`.
+- **Effect:** default interval 15 s. Claude found no classic memory leak (no static caches or growing collections; short transactions; limited queries). Five findings were presented; one came from a load check (12 admin events at once against a failing webhook). Treefa chose (decision card, 14:18) to fix the first three and record the last two:
+  1. **Database connection pool starvation, losing notifications.** 10 of 12 events were stored but only 3 delivered. Fixed (ADR-023 amended) with a regression test that failed before the fix.
+  2. **No SMTP timeouts:** a hung mail server would block delivery and polling forever. Fixed (ADR-027 amended); a send to a silent server was confirmed to hang without them.
+  3. **No limit on rules per user**, which bounds the memory used per event. Fixed: at most 50 (ADR-029).
+  4. **Request body size not limited.** Recorded as [`tradeoffs.md`](tradeoffs.md) T25.
+  5. **Unbounded table growth; no container memory settings yet.** Recorded as T26 (and the existing T18).
+
