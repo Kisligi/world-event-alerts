@@ -422,7 +422,7 @@ flowchart LR
 
 **The image** ([`Dockerfile`](../Dockerfile), ADR-034) is built in three stages:
 1. **Node.js** installs the locked packages and runs `npm run build` (type check, then Vite build).
-2. **JDK** downloads the Maven dependencies in their own cached layer, copies the built web app into `src/main/resources/static/` and packages the jar. Tests are not run here ([`tradeoffs.md`](tradeoffs.md) T33).
+2. **JDK** normalizes the line endings of `mvnw` (a Windows checkout may have changed them, review-log R8), downloads the Maven dependencies in their own cached layer, copies the built web app into `src/main/resources/static/` and packages the jar. Tests are not run here ([`tradeoffs.md`](tradeoffs.md) T33).
 3. **Java runtime only**, running as a non-root user, with `-XX:MaxRAMPercentage=75`: the heap may use 75% of the container's 1 GB limit (768 MB) instead of the JVM's default 25%.
 
 Spring Boot serves `index.html` for `/` and the JavaScript and CSS files from `static/`. `WebAppController` forwards the web app's other routes (`/notifications`, `/admin`, `/admin/{tab}`) to `index.html`, so reloading a page or opening a link works. The routes are listed rather than "everything unknown", so an unknown `/api/...` path is still a 404 problem detail.

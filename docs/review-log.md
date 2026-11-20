@@ -60,3 +60,13 @@ Times are UTC on 2026-11-20.
   4. **Request body size not limited.** Recorded as [`tradeoffs.md`](tradeoffs.md) T25.
   5. **Unbounded table growth; no container memory settings yet.** Recorded as T26 (and the existing T18).
 
+## R8 — 17:00 — The image did not build on Windows
+
+- **Claude proposed:** M6 on `m6-review` (`0b6e9c8`), with `docker compose up --build` as the one command. Claude's own check ran on Linux only (dev-journal M6).
+- **Treefa found:** on Windows the build stopped at `RUN ./mvnw -q -B dependency:go-offline` with `/bin/sh: 1: ./mvnw: not found` (exit code 127).
+- **Cause:** Git for Windows usually checks text files out with Windows line endings (`core.autocrlf`). The first line of `mvnw` became `#!/bin/sh` followed by a carriage return, so Linux looked for a program called "sh\r", which does not exist. The repository had no `.gitattributes` to prevent this. Claude reproduced the exact error by building a copy of the repository with every text file converted to Windows line endings.
+- **Effect:** two fixes, so that it works for existing and new checkouts:
+  1. The `Dockerfile` removes carriage returns from `mvnw` and the wrapper settings and makes `mvnw` executable before running it, whatever the checkout did.
+  2. A new `.gitattributes` keeps `mvnw` and shell scripts at Linux line endings in every checkout, and leaves `mvnw.cmd` as it is (it is stored with Windows line endings already).
+
+  The same converted copy then built and the app started and served its pages. Not verified by Claude on Windows itself.

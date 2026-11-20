@@ -267,3 +267,75 @@ Decision card, 14:18 — "Which memory and resource findings should I fix on m3-
 > M4 tested: all tests pass (backend + frontend), coverage looks great, and the UI works as expected. Approved.
 
 **Response:** Claude read this as the approval of M5, because it names the Admin UI and M4 had already been approved (Prompt 23), and said so. Fast-forwarded `main` to `51a3448` (no new commit) and pushed. Implemented milestone M6 (one-command run and final docs) on the `m6-review` branch. See [`dev-journal.md`](dev-journal.md).
+
+## Prompt 27 — Treefa, 16:32 (approval to commit and push the M6 review branch)
+
+> You can commit and push the m6-review branch.
+
+**Response:** committed M6 on `m6-review` (`0b6e9c8`) and pushed it; `main` stayed at `51a3448`.
+
+## Prompt 28 — Treefa, 17:00 (the image build fails on Windows)
+
+Verbatim; the padding between the build steps and their times was shortened to fit the page:
+
+```text
+On Windows, "docker compose up --build" fails at the Dockerfile step. I got this error:
+
+ docker compose up --build
+[+] Building 1.1s (21/25)
+ => [internal] load local bake definitions                                                     0.0s
+ => => reading from stdin 459B                                                                 0.0s
+ => [internal] load build definition from Dockerfile                                           0.0s
+ => => transferring dockerfile: 1.60kB                                                         0.0s
+ => [internal] load metadata for docker.io/library/eclipse-temurin:21.0.13_9-jre-noble         0.6s
+ => [internal] load metadata for docker.io/library/node:22.23.5-alpine3.24                     0.6s
+ => [internal] load metadata for docker.io/library/eclipse-temurin:21.0.13_9-jdk-noble         0.6s
+ => [internal] load .dockerignore                                                              0.0s
+ => => transferring context: 213B                                                              0.0s
+ => [web 1/6] FROM docker.io/library/node:22.23.5-alpine3.24@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a  0.1s
+ => => resolve docker.io/library/node:22.23.5-alpine3.24@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a      0.1s
+ => [stage-2 1/4] FROM docker.io/library/eclipse-temurin:21.0.13_9-jre-noble@sha256:b4f9d2a0bc273417cf5219b7b832bbf0493ed500b7b57d5001d9f83374659060  0.1s
+ => => resolve docker.io/library/eclipse-temurin:21.0.13_9-jre-noble@sha256:b4f9d2a0bc273417cf5219b7b832bbf0493ed500b7b57d5001d9f83374659060      0.1s
+ => [internal] load build context                                                              0.0s
+ => => transferring context: 13.18kB                                                           0.0s
+ => [build 1/8] FROM docker.io/library/eclipse-temurin:21.0.13_9-jdk-noble@sha256:bc12ebd88ffa6dda0092940e179365b05aef8d813b867f9df5a1f168c9a44feb  0.1s
+ => => resolve docker.io/library/eclipse-temurin:21.0.13_9-jdk-noble@sha256:bc12ebd88ffa6dda0092940e179365b05aef8d813b867f9df5a1f168c9a44feb      0.1s
+ => CACHED [stage-2 2/4] RUN groupadd --system app && useradd --system --gid app app           0.0s
+ => CACHED [stage-2 3/4] WORKDIR /app                                                          0.0s
+ => CACHED [build 2/8] WORKDIR /build                                                          0.0s
+ => CACHED [build 3/8] COPY backend/mvnw backend/pom.xml ./                                    0.0s
+ => CACHED [build 4/8] COPY backend/.mvn .mvn                                                  0.0s
+ => CACHED [web 2/6] WORKDIR /web                                                              0.0s
+ => CACHED [web 3/6] COPY frontend/package.json frontend/package-lock.json ./                  0.0s
+ => CACHED [web 4/6] RUN npm ci --no-audit --no-fund                                           0.0s
+ => CACHED [web 5/6] COPY frontend/ ./                                                         0.0s
+ => CACHED [web 6/6] RUN npm run build                                                         0.0s
+ => ERROR [build 5/8] RUN ./mvnw -q -B dependency:go-offline                                   0.2s
+------
+ > [build 5/8] RUN ./mvnw -q -B dependency:go-offline:
+0.158 /bin/sh: 1: ./mvnw: not found
+------
+Dockerfile:20
+
+--------------------
+
+  18 |     COPY backend/.mvn .mvn
+
+  19 |     # Download dependencies in their own layer, so code changes do not download them again.
+
+  20 | >>> RUN ./mvnw -q -B dependency:go-offline
+
+  21 |     COPY backend/src src
+
+  22 |     COPY --from=web /web/dist src/main/resources/static
+
+--------------------
+
+failed to solve: process "/bin/sh -c ./mvnw -q -B dependency:go-offline" did not complete successfully: exit code: 127
+
+
+What's next:
+    Debug this Compose error with Gordon → docker ai "help me fix this compose error"
+```
+
+**Response:** reproduced the error with Windows line endings in `mvnw`, fixed it in the `Dockerfile` and with a `.gitattributes` file, and asked for approval to commit the fix on `m6-review`. See [`review-log.md`](review-log.md) R8.

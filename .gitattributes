@@ -1,0 +1,13 @@
+# Line endings (review-log R8). Text files are stored with LF; Git converts them for Windows
+# checkouts as configured, except for files that must keep their line endings everywhere.
+* text=auto
+
+# Shell scripts run in Linux containers and in Git Bash / WSL: always LF.
+mvnw   text eol=lf
+*.sh   text eol=lf
+
+# Windows batch files are stored with CRLF already; keep them exactly as they are.
+*.cmd  -text
+
+*.png  binary
+*.jar  binary

@@ -16,6 +16,9 @@ FROM eclipse-temurin:21.0.13_9-jdk-noble AS build
 WORKDIR /build
 COPY backend/mvnw backend/pom.xml ./
 COPY backend/.mvn .mvn
+# A Windows checkout can give mvnw CRLF line endings (git core.autocrlf), and Linux then cannot
+# run it ("./mvnw: not found"). Normalize them here, whatever the checkout did (review-log R8).
+RUN sed -i 's/\r$//' mvnw .mvn/wrapper/maven-wrapper.properties && chmod +x mvnw
 # Download dependencies in their own layer, so code changes do not download them again.
 RUN ./mvnw -q -B dependency:go-offline
 COPY backend/src src

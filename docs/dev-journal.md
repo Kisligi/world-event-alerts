@@ -214,3 +214,9 @@ Treefa asked for a 15 s simulator interval and a review for memory leaks and out
   - In Chromium (Playwright) on port 8080: opened `/admin/deliveries` directly and reloaded it; published events from Admin → Events; switched Slack off and on. Result ([screenshot](screenshots/m6-compose-delivery-log.png)): Alice's email and Slack message sent, Bob's broken Slack target failed after 3 attempts while his email went out, the Slack message during the switch-off skipped. No browser console errors.
   - Mailpit received the 3 emails; WireMock received the 3 failing attempts and the successful Slack POST.
 - **One honest limit of this check:** this sandbox reaches the internet only through a proxy that build containers cannot use by default. The image was therefore built from a copy of the `Dockerfile` with the proxy and its certificate added to the two build stages; the steps themselves were identical. The committed `Dockerfile` needs no proxy and was not built unchanged here; `docker compose config` validates the compose file.
+
+### M6 review fix: building on Windows
+
+Treefa's first run on Windows failed: `./mvnw: not found` in the image build. The cause was Windows line endings in `mvnw` from the Git checkout; this is exactly the kind of difference the Linux-only check above could not catch. Details and the fix: [`review-log.md`](review-log.md) R8.
+
+**Verified:** a copy of the repository with every text file converted to Windows line endings (and `mvnw` without its executable bit) reproduced the error with the old `Dockerfile` and built with the new one; the resulting image started healthy and served `/`, `/admin/events` and `/api/users`. `git add --renormalize` with the new `.gitattributes` changes no stored file. Backend and frontend code are unchanged, so their test results above still apply.
