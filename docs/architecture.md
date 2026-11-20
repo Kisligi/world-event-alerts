@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: planned design (M0).** No code exists yet. This document describes the target design agreed during planning; it is updated at every milestone to match the actual code.
+> **Status: M1.** Users and alert rules are implemented (REST API, PostgreSQL schema). Event ingestion, matching, channels and the UI are still the planned design. Each section says which. This document is updated at every milestone to match the code.
 
 ## Overview
 
@@ -53,15 +53,99 @@ flowchart LR
 5. The channel sends the message (SMTP for email, HTTP POST for Slack). Failures are retried up to 3 attempts with backoff.
 6. The final status (sent / failed, attempts, error, message body) is written to the delivery log, which users see as their notification history and admins as the delivery log.
 
-## Planned domain model
+## Implemented so far (M1)
+
+### Code layout
+
+The backend is organized by feature (package-by-feature), not by technical layer, so each folder holds everything about one concept.
+
+```
+backend/src/main/java/io/github/kisligi/alerts/
+├── WorldEventAlertsApplication.java   entry point
+├── common/      shared enums (EventCategory, Severity, ChannelType), exceptions,
+│                RFC 9457 error mapping (ApiExceptionHandler), OpenAPI info
+├── user/        AppUser entity, repository, GET /api/users
+└── alert/       AlertRule entity, ChannelTarget, validation, service, REST controller
+backend/src/main/resources/
+├── application.yaml                   config; every value overridable by env var
+└── db/migration/                      Flyway: V1 schema, V2 demo users
+```
+
+### REST API
+
+Interactive documentation: Swagger UI at `/swagger-ui.html`, OpenAPI JSON at `/v3/api-docs`.
+
+| Method | Path | What it does |
+|--------|------|--------------|
+| GET | `/api/users` | List the seeded demo users |
+| GET | `/api/users/{userId}/alerts` | List a user's alert rules |
+| POST | `/api/users/{userId}/alerts` | Create an alert rule (201 + `Location`) |
+| GET | `/api/alerts/{id}` | Get one alert rule |
+| PUT | `/api/alerts/{id}` | Replace an alert rule (also used to enable/disable it) |
+| DELETE | `/api/alerts/{id}` | Delete an alert rule (204) |
+
+Errors use RFC 9457 problem details (`application/problem+json`): 400 with an `errors` list for validation failures, 400 for an address that does not fit its channel, 404 for unknown users or rules.
+
+Validation rules: name required (≤ 100 chars); at least one category; at most 20 keywords; minimum severity required; 1–10 targets. An `EMAIL` target must look like an email address; a `SLACK` target must be an `http(s)` URL (plain `http` is allowed for the local Slack stand-in). Keywords are trimmed, lower-cased and de-duplicated.
+
+### Database schema (Flyway V1)
+
+```mermaid
+erDiagram
+    app_user ||--o{ alert_rule : owns
+    alert_rule ||--|{ alert_rule_category : "listens to"
+    alert_rule ||--o{ alert_rule_keyword : "filters by"
+    alert_rule ||--|{ alert_rule_target : notifies
+    app_user {
+        bigint id PK
+        varchar name
+        varchar email UK
+    }
+    alert_rule {
+        bigint id PK
+        bigint user_id FK
+        varchar name
+        varchar min_severity
+        boolean enabled
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    alert_rule_category {
+        bigint alert_rule_id PK, FK
+        varchar category PK
+    }
+    alert_rule_keyword {
+        bigint alert_rule_id PK, FK
+        varchar keyword PK
+    }
+    alert_rule_target {
+        bigint alert_rule_id PK, FK
+        varchar channel_type PK
+        varchar address PK
+    }
+```
+
+Flyway owns the schema; Hibernate runs with `ddl-auto: validate`, so the app refuses to start if entities and schema drift apart.
+
+### Tests
+
+| Test class | Kind | What it covers |
+|------------|------|----------------|
+| `SeverityTest` | unit | severity ranking |
+| `ChannelTargetValidatorTest` | unit (parameterized) | valid and invalid email addresses and webhook URLs |
+| `AlertRuleServiceTest` | unit, Mockito | normalization, defaults, unknown user, bad target, update, delete |
+| `AlertRuleControllerTest` | `@WebMvcTest` | status codes, `Location` header, validation errors, problem-detail format |
+| `AlertApiIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL | Flyway migrations, seeded users, full create/list/update/delete cycle, OpenAPI document |
+
+## Domain model (full target; ✅ = implemented)
 
 | Entity | Key fields |
 |--------|------------|
-| `User` | id, name, email (seeded demo users) |
-| `AlertRule` | id, user, name, categories, keywords, minSeverity, enabled |
-| `ChannelTarget` | id, alertRule, channelType (`EMAIL`, `SLACK`, ...), address (email or webhook URL) |
+| `AppUser` ✅ | id, name, email (seeded demo users) |
+| `AlertRule` ✅ | id, user, name, categories, keywords, minSeverity, enabled, createdAt, updatedAt |
+| `ChannelTarget` ✅ | value object inside `AlertRule`: channel type (`EMAIL`, `SLACK`, ...) + address (email or webhook URL) |
 | `Event` | id, category, title, description, severity, source, occurredAt, externalId |
-| `Delivery` | id, event, alertRule, channelTarget, status, attempts, lastError, body, sentAt; unique (event, channelTarget) |
+| `Delivery` | id, event, alertRule, channel type, address, status, attempts, lastError, body, sentAt; unique (event, alertRule, channel type, address) |
 | `ChannelSetting` | channelType, enabled (global admin toggle) |
 
 ## Extension points

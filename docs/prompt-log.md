@@ -127,3 +127,11 @@ Spring Boot line: **Spring Boot 4.1.3**.
 > Done, I installed the Claude GitHub App on Kisligi/world-event-alerts.
 
 **Response:** removed the `Claude-Session` line from the proposed commit message and recorded the convention (review log R4, [`process.md`](process.md)); asked for the final go for the M0 commit.
+
+---
+
+## Prompt 9 — Treefa, 12:02 (approval of the M0 commit)
+
+> go
+
+**Response:** committed `b170acb` and pushed `main` (M0). Then implemented milestone M1: Spring Boot backend, user and alert rule REST API, Flyway schema, 28 tests including a Testcontainers PostgreSQL integration test. See [`dev-journal.md`](dev-journal.md).

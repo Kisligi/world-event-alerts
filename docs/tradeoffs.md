@@ -14,3 +14,7 @@ Each row: what we chose now, what the fuller version would be, why it was deferr
 | T6 | Delivery | Immediate notifications only | Per-alert daily/hourly digest option | Needs scheduler and digest templates; ~2 h | ~2 h | Q6 |
 | T7 | Delivery | Retries run in-process (pending retries are lost if the app restarts) | Durable retry via outbox table or broker dead-letter queue (see T1) | Single-instance prototype; time | ~2–3 h | Q6 |
 | T8 | Process | Direct commits to main (no PRs) | Feature branches + pull requests with CI checks before merge | Single developer who reviews and tests before every commit | ~0.5 h setup | Q7 |
+| T9 | Data | Demo users are inserted by a Flyway migration, so they would exist in every environment | Seed demo data only in a `demo` profile (e.g. a startup data loader), keep migrations schema-only | Simplest way to have users without sign-up; this is a demo | ~0.5 h | M1 |
+| T10 | Validation | Email addresses checked with a simple pattern (one "@", a dot in the domain, no spaces) | Full validation, or confirming the address by sending a verification email | Good enough for a demo; real verification needs user accounts (T3) | ~1–2 h | M1 |
+| T11 | API | List endpoints return everything, no pagination | Pageable endpoints (`page`, `size`, `sort`) | Tiny data volumes | ~1 h | M1 |
+| T12 | Security | Swagger UI and OpenAPI document are always on | Disable or protect them in production (`springdoc.api-docs.enabled=false`) | Useful for reviewers; no production deployment | ~10 min | M1 |

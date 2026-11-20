@@ -4,7 +4,7 @@ Users set up alert rules and get notified by **email** or **Slack** when somethi
 
 This is a one-day prototype built from a deliberately vague product brief. The priority is a well-documented development process: every decision, prompt, correction and shortcut is recorded in [`docs/`](docs/).
 
-> **Status: M0, planning complete.** No application code yet. Scope and stack are agreed; see [Milestones](#milestones).
+> **Status: M1, backend skeleton.** The REST API for users and alert rules works against PostgreSQL. Events, notifications and the UI come in later milestones; see [Milestones](#milestones).
 
 ## The brief
 
@@ -22,6 +22,14 @@ That was the only input. How it became a concrete scope is documented in [`docs/
 
 Full scope: [`docs/planning/05-agreed-scope.md`](docs/planning/05-agreed-scope.md).
 
+## Repository layout
+
+```
+backend/         Spring Boot service (Maven, Java 21)
+docs/            All documentation, planning materials and screenshots
+compose.yaml     Local infrastructure (PostgreSQL now; the full stack from M6)
+```
+
 ## Tech stack
 
 Java 21 · Spring Boot 4.1.3 · PostgreSQL + Flyway · React 19 + TypeScript (Vite) · JUnit 5, Mockito, Testcontainers, Vitest · Docker Compose · Mailpit · WireMock
@@ -30,13 +38,42 @@ Why these: [`docs/decisions.md`](docs/decisions.md).
 
 ## How to run
 
-Not runnable yet. From milestone M6 the whole stack will start with:
+**Final goal (M6):** `docker compose up --build`, with Docker as the only prerequisite.
+
+**Now (M1)**, with Docker and JDK 21:
 
 ```bash
-docker compose up --build
+# Option 1: PostgreSQL from docker compose, app from Maven
+docker compose up -d postgres
+cd backend && ./mvnw spring-boot:run
+
+# Option 2: no compose; the app starts its own throwaway PostgreSQL with Testcontainers
+cd backend && ./mvnw spring-boot:test-run
 ```
 
-The only prerequisite will be Docker with Compose.
+Then open:
+- Swagger UI: http://localhost:8080/swagger-ui.html ([screenshot](docs/screenshots/m1-swagger-ui.png))
+- Demo users: http://localhost:8080/api/users
+
+Try it:
+
+```bash
+curl -X POST localhost:8080/api/users/1/alerts -H 'Content-Type: application/json' -d '{
+  "name": "Major earthquakes",
+  "categories": ["DISASTER"],
+  "keywords": ["earthquake"],
+  "minSeverity": "HIGH",
+  "targets": [{"type": "EMAIL", "address": "alice@example.com"}]
+}'
+```
+
+## How to test
+
+```bash
+cd backend && ./mvnw verify
+```
+
+Runs unit tests, web-layer tests and integration tests. The integration tests start a real PostgreSQL with Testcontainers, so **Docker must be running**.
 
 ## Milestones
 
@@ -44,8 +81,8 @@ Each milestone is one commit on `main`. A milestone is done when the code compil
 
 | # | Milestone | Status |
 |---|-----------|--------|
-| M0 | Docs skeleton and planning records | ✅ this commit |
-| M1 | Backend skeleton and alert API | ⏳ |
+| M0 | Docs skeleton and planning records | ✅ |
+| M1 | Backend skeleton and alert API | ✅ this commit |
 | M2 | Events and matching | ⏳ |
 | M3 | Channels and delivery log | ⏳ |
 | M4 | User UI | ⏳ |
@@ -62,6 +99,7 @@ Each milestone is one commit on `main`. A milestone is done when the code compil
 | [`docs/architecture.md`](docs/architecture.md) | How the system is (or will be) structured |
 | [`docs/prompt-log.md`](docs/prompt-log.md) | The full prompt history, verbatim |
 | [`docs/review-log.md`](docs/review-log.md) | Every correction or change request on Claude's proposals |
+| [`docs/dev-journal.md`](docs/dev-journal.md) | Per-milestone notes: what was built, problems met, how it was verified |
 | [`docs/planning/`](docs/planning/) | Original planning materials, unedited |
 
 ## License

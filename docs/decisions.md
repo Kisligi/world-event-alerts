@@ -86,3 +86,34 @@ Proposed in [`planning/05-agreed-scope.md`](planning/05-agreed-scope.md) and app
 - **Context:** Ground rule 2 says Claude creates the public GitHub repository.
 - **Decision:** Treefa creates the empty repository; Claude does all commits and pushes after approval.
 - **Why:** The environment Claude runs in cannot create GitHub repositories. Recorded so the deviation is visible.
+
+---
+
+Decisions below were made by Claude during implementation, within the approved scope, and presented to Treefa with the milestone that introduced them.
+
+## ADR-013 — Repository layout and package-by-feature (M1)
+
+- **Decision:** `backend/` holds the Maven project; the React app will live in `frontend/`; `compose.yaml` and `docs/` sit at the root. Java packages are grouped by feature (`user`, `alert`, later `event`, `delivery`, `channel`) with a small `common` package.
+- **Alternatives:** single Maven project at the root with the frontend built by `frontend-maven-plugin`; package-by-layer (`controller`, `service`, `repository`).
+- **Why:** Two independent toolchains (Maven, npm) stay simple and can be built in separate Docker stages. Package-by-feature keeps each concept in one place, which makes the "add a channel" story easy to follow.
+
+## ADR-014 — Errors as RFC 9457 problem details (M1)
+
+- **Decision:** All API errors are `application/problem+json` (Spring's `ProblemDetail`), with an extra `errors` list for field validation failures.
+- **Why:** A standard, self-describing error format supported natively by Spring; the frontend can show `detail` and `errors` without custom parsing.
+
+## ADR-015 — Schema owned by Flyway, verified by Hibernate (M1)
+
+- **Decision:** Flyway migrations create the schema; Hibernate runs with `ddl-auto: validate`. One migration per milestone that changes the schema.
+- **Why:** Reviewable SQL in version control; the app fails fast if entities and schema disagree. Demo users are inserted by a migration (`V2`), see [`tradeoffs.md`](tradeoffs.md) T9.
+
+## ADR-016 — Testcontainers for integration tests and local runs (M1)
+
+- **Decision:** Integration tests run against a real PostgreSQL 17 started by Testcontainers (`@ServiceConnection`). The same configuration powers `./mvnw spring-boot:test-run`, which runs the app with a throwaway database and no compose file.
+- **Alternatives:** H2 in PostgreSQL mode for tests.
+- **Why:** Tests exercise the real database and the real migrations; no dialect surprises. Cost: `./mvnw verify` needs Docker (already a prerequisite, ADR-002).
+
+## ADR-017 — Keywords stored lower-case (M1)
+
+- **Decision:** Keywords are trimmed, lower-cased (`Locale.ROOT`) and de-duplicated on save.
+- **Why:** Matching is case-insensitive (ADR-006), so storing them normalized avoids duplicates such as "Japan" and "japan" and keeps the matcher simple.

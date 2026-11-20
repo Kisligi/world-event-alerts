@@ -1,0 +1,27 @@
+# World Event Alerts - application configuration.
+# All values are demo defaults for a local, self-contained setup. Nothing here is a secret:
+# the database credentials only work for the throwaway local PostgreSQL container.
+spring:
+  application:
+    name: world-event-alerts
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/alerts}
+    username: ${DB_USER:alerts}
+    password: ${DB_PASSWORD:alerts}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema; Hibernate only checks that entities match it.
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
