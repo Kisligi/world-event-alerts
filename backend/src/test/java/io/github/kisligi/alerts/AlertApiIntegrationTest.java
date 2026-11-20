@@ -129,6 +129,19 @@ class AlertApiIntegrationTest {
     }
 
     @Test
+    void adminSeesEveryUsersRulesOrderedByUser() throws Exception {
+        mvc.perform(post("/api/users/2/alerts").contentType(MediaType.APPLICATION_JSON).content(BOB_RULE))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/users/1/alerts").contentType(MediaType.APPLICATION_JSON).content(BOB_RULE))
+                .andExpect(status().isCreated());
+
+        mvc.perform(get("/api/admin/alerts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].userId", contains(1, 2)))
+                .andExpect(jsonPath("$[0].categories", contains("NEWS", "MARKET")));
+    }
+
+    @Test
     void invalidTargetIsRejectedAndNothingIsStored() throws Exception {
         String badSlackUrl = BOB_RULE.replace("http://slack-mock:8080/services/bob", "slack-mock/bob");
 

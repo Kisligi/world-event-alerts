@@ -148,6 +148,16 @@ class AlertRuleControllerTest {
     }
 
     @Test
+    void adminListsEveryUsersRules() throws Exception {
+        when(service.listAll()).thenReturn(List.of(sampleResponse(10L), sampleResponse(11L)));
+
+        mvc.perform(get("/api/admin/alerts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id", contains(10, 11)))
+                .andExpect(jsonPath("$[0].userId").exists());
+    }
+
+    @Test
     void getExistingRuleReturnsIt() throws Exception {
         when(service.get(10L)).thenReturn(sampleResponse(10L));
 

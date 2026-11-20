@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: M4.** Implemented: users and alert rules (M1); event sources, ingestion and matching (M2); notification channels, delivery and the delivery log (M3); the user web app (M4). Still planned: the admin UI (M5) and the app container in the compose stack (M6). Each section says which. This document is updated at every milestone to match the code.
+> **Status: M5.** Implemented: users and alert rules (M1); event sources, ingestion and matching (M2); notification channels, delivery and the delivery log (M3); the user web app (M4); the admin area of the web app (M5). Still planned: the app container in the compose stack (M6). Each section says which. This document is updated at every milestone to match the code.
 
 ## Overview
 
@@ -79,7 +79,7 @@ sequenceDiagram
 
 Every database step runs in its own short transaction and no transaction or connection is held during a network call, so a delivery uses at most one database connection at a time ([`decisions.md`](decisions.md) ADR-023; this was not true in the first M3 version, see [`review-log.md`](review-log.md) R7). Dispatch is synchronous: the thread that ingested the event also sends the notifications ([`tradeoffs.md`](tradeoffs.md) T19).
 
-## Implemented so far (M1–M4)
+## Implemented so far (M1–M5)
 
 ### Code layout
 
@@ -120,6 +120,7 @@ Interactive documentation: Swagger UI at `/swagger-ui.html`, OpenAPI JSON at `/v
 | PUT | `/api/alerts/{id}` | Replace an alert rule (also used to enable/disable it) |
 | DELETE | `/api/alerts/{id}` | Delete an alert rule (204) |
 | GET | `/api/events?limit=50` | Most recent events, newest first (`limit` 1–200) |
+| GET | `/api/admin/alerts` | Every user's alert rules, ordered by user, then rule (admin view; bounded by 50 rules per user) |
 | POST | `/api/admin/events` | Publish a test event; runs the normal ingestion, matching and delivery and returns the matched rule ids (201) |
 | GET | `/api/users/{userId}/notifications?limit=50` | A user's notification history, newest first (`limit` 1–200) |
 | GET | `/api/admin/deliveries?status=FAILED&limit=100` | The delivery log for all users, newest first; optional `status` filter (`limit` 1–500) |
@@ -250,9 +251,9 @@ Flyway owns the schema; Hibernate runs with `ddl-auto: validate`, so the app ref
 |------------|------|----------------|
 | `SeverityTest` | unit | severity ranking |
 | `ChannelTargetValidatorTest` | unit (parameterized) | valid and invalid email addresses and webhook URLs (scheme case, missing host) |
-| `AlertRuleServiceTest` | unit, Mockito | normalization, defaults, unknown user (create and list), bad target, update replaces collections, update/delete of missing rule, delete, rule limit per user |
-| `AlertRuleControllerTest` | `@WebMvcTest` | status codes, `Location` header, every request constraint, malformed JSON, business-rule 400 and 404 problem details, ISO timestamps |
-| `AlertApiIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL | Flyway migrations, seeded users, full create/read/update/delete cycle with timestamps, per-user isolation, invalid target not stored, no orphan rows after delete, OpenAPI document, limit of 50 rules per user (shipped default) |
+| `AlertRuleServiceTest` | unit, Mockito | normalization, defaults, unknown user (create and list), bad target, update replaces collections, update/delete of missing rule, delete, rule limit per user, list every rule (admin) |
+| `AlertRuleControllerTest` | `@WebMvcTest` | status codes, `Location` header, every request constraint, malformed JSON, business-rule 400 and 404 problem details, ISO timestamps, admin list of every rule |
+| `AlertApiIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL | Flyway migrations, seeded users, full create/read/update/delete cycle with timestamps, per-user isolation, invalid target not stored, no orphan rows after delete, OpenAPI document, limit of 50 rules per user (shipped default), admin list ordered by user |
 | `AlertMatcherTest` | unit (parameterized) | every matching rule: category, severity boundaries, keyword case and substring, title or description, empty keywords, disabled rule |
 | `WorldEventTest` | unit | default and truncated `occurredAt`, searchable text |
 | `EventIngestionServiceTest` | unit, Mockito, real matcher | duplicates skipped before saving, no duplicate check without external id, only fitting rules announced, nothing announced without a match, match announced only after the transaction has committed |
@@ -273,9 +274,9 @@ Flyway owns the schema; Hibernate runs with `ddl-auto: validate`, so the app ref
 | `DeliveryIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL, Mailpit, WireMock | the email arrives in Mailpit and the Slack POST reaches WireMock; the same source event received twice notifies once; a broken webhook is tried 3 times then `FAILED` while the email still goes out; switched-off channel is `SKIPPED` and nothing is sent; history kept after the rule is deleted |
 | `DeliveryConcurrencyIntegrationTest` | `@SpringBootTest` + Testcontainers, connection pool of 2 | 4 events ingested in parallel with a slow (1 s) Slack stand-in are all stored and delivered; regression test for the pool starvation found in the M3 review |
 
-145 tests; line coverage 99.7% (573/575), branch coverage 99.1% (116/117) (JaCoCo). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
+148 tests; line coverage 99.7% (577/579), branch coverage 99.1% (116/117) (JaCoCo). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
 
-### Web app (M4)
+### Web app (M4, M5)
 
 A single-page React app in `frontend/` (React 19, React Router 8, TypeScript 7, built with Vite 8). It has no state library and no backend of its own: it talks only to the REST API above.
 
@@ -285,11 +286,13 @@ frontend/src/
 ├── App.tsx               top bar (navigation, "Acting as" user switcher) and routes
 ├── UserContext.tsx       the demo users and the selected one, remembered in localStorage
 ├── useApi.ts             load-on-change hook; ignores answers that arrive after a switch
+├── useAutoRefresh.ts     reloads a page's data every 10 s
 ├── format.ts             labels, date format, keyword parsing
 ├── api/client.ts         fetch wrapper: JSON in and out, problem details → ApiError
 ├── api/types.ts          TypeScript types mirroring the backend's JSON
-├── components/           AlertForm, AlertCard, ErrorMessage, WithUser
+├── components/           AlertForm, AlertCard, DeliveryTable, ErrorMessage, WithUser
 ├── pages/                AlertsPage (/), NotificationsPage (/notifications)
+│   └── admin/            AdminLayout, UsersAlertsPage, EventsPage, DeliveryLogPage, ChannelsPage
 └── test/                 fake backend for tests (fakeApi), renderApp, sample data
 ```
 
@@ -297,7 +300,13 @@ frontend/src/
 |-------|----------------------|-----------|
 | `/` My alerts | See their rules as cards; create, edit, turn on/off, delete (with an inline confirmation, no browser dialog) | `GET /api/users/{id}/alerts`, `POST …/alerts`, `PUT /api/alerts/{id}`, `DELETE /api/alerts/{id}` |
 | `/notifications` | See every notification, newest first, with status (Sent, Failed after N attempts, Skipped); select a row to read the exact message and the error | `GET /api/users/{id}/notifications`, again every 10 s |
+| `/admin` Users and alerts | Every demo user with their rules (read-only) | `GET /api/users`, `GET /api/admin/alerts` |
+| `/admin/events` | Publish a test event (category, severity, title, description) and see how many alerts it matched; recent events from every source | `POST /api/admin/events`, `GET /api/events`, again every 10 s |
+| `/admin/deliveries` | The delivery log for all users, filterable by status, with the user's name; select a row for message and error | `GET /api/admin/deliveries?status=…`, again every 10 s |
+| `/admin/channels` | Switch Email or Slack off and on for everyone; warns if a channel has no implementation | `GET /api/admin/channels`, `PUT /api/admin/channels/{type}` |
 | any other path | Redirected to `/` | |
+
+The admin area is open to everyone, like the rest of the app (no login, ADR-004, [`tradeoffs.md`](tradeoffs.md) T3). The "Acting as" switcher is hidden there, because the admin pages cover all users.
 
 **Who is the user?** There is no login (ADR-004). `UserContext` loads `GET /api/users`, and the "Acting as" switcher picks one; the choice is stored in `localStorage` and falls back to the first user when storage is blocked or the stored user no longer exists. Each page is keyed by the user id, so switching users discards open forms and errors.
 
@@ -318,8 +327,9 @@ Tests render the real app with Testing Library in jsdom and replace only `fetch`
 | `components/AlertForm.test.tsx` | defaults; the exact request body; each client-side check; backend and unexpected errors; editing; 1–10 targets; placeholder per channel; cancel |
 | `pages/AlertsPage.test.tsx` | first user by default; switching and remembering the user; stale stored user; create, edit, cancel, turn off (whole rule in the `PUT`), delete with confirmation; failed action; backend down; unknown path |
 | `pages/NotificationsPage.test.tsx` | rows with time, status, channel and alert; expand and collapse a message; empty state; automatic refresh every 10 s; manual refresh; user switch |
+| `pages/admin/AdminPages.test.tsx` | admin link and hidden switcher; rules grouped per user (including users without rules); events with links; publishing (exact request body, matched count, "nobody was notified", title required, backend errors, list refreshed); automatic refresh; delivery log with user names and status filter (request URL, empty results, 6-column details); channel off and on (request bodies), missing implementation warning, failed switch |
 
-45 tests; lines 100%, branches 97% (Vitest V8 coverage). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
+56 tests; lines 100%, branches 98.2% (Vitest V8 coverage). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
 
 ## Domain model (full target; ✅ = implemented)
 

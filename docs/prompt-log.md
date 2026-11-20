@@ -238,3 +238,14 @@ Decision card, 14:18 — "Which memory and resource findings should I fix on m3-
 
 **Response:** fast-forwarded `main` to `a6717cc` (no new commit) and pushed. Implemented milestone M4 (user UI) on the `m4-review` branch. See [`dev-journal.md`](dev-journal.md).
 
+## Prompt 22 — Treefa, 15:13 (approval to push the M4 review branch)
+
+> commit it and push a new m4-review branch
+
+**Response:** committed M4 on the `m4-review` branch and pushed it; `main` stayed at `a6717cc`.
+
+## Prompt 23 — Treefa, 15:34 (approval of M4)
+
+> Tested M4: all tests pass, coverage looks great, and the UI works as expected. Approved.
+
+**Response:** fast-forwarded `main` to `a8877c1` (no new commit) and pushed. Implemented milestone M5 (admin UI) on the `m5-review` branch. See [`dev-journal.md`](dev-journal.md).

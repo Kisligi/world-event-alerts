@@ -40,6 +40,14 @@ public class AlertRuleService {
                 .toList();
     }
 
+    /** All rules of all users, for the admin view. At most users × the per-user limit. */
+    @Transactional(readOnly = true)
+    public List<AlertRuleResponse> listAll() {
+        return rules.findAllByOrderByUserIdAscIdAsc().stream()
+                .map(AlertRuleResponse::from)
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public AlertRuleResponse get(Long id) {
         return AlertRuleResponse.from(requireRule(id));

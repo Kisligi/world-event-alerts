@@ -132,6 +132,17 @@ class AlertRuleServiceTest {
     }
 
     @Test
+    void listAllReturnsEveryRuleInRepositoryOrder() {
+        AlertRule quakes = new AlertRule(new AppUser("Alice", "alice@example.com"));
+        quakes.setName("Quakes");
+        AlertRule markets = new AlertRule(new AppUser("Bob", "bob@example.com"));
+        markets.setName("Markets");
+        when(rules.findAllByOrderByUserIdAscIdAsc()).thenReturn(List.of(quakes, markets));
+
+        assertThat(service.listAll()).extracting(AlertRuleResponse::name).containsExactly("Quakes", "Markets");
+    }
+
+    @Test
     void updateOfMissingRuleIsNotFoundAndSavesNothing() {
         when(rules.findById(8L)).thenReturn(Optional.empty());
 

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ALICE, BOB, delivery, fakeApi } from '../test/fakeApi';
 import { renderApp } from '../test/renderApp';
-import { REFRESH_INTERVAL_MS } from './NotificationsPage';
+import { REFRESH_INTERVAL_MS } from '../useAutoRefresh';
 
 describe('Notifications', () => {
   afterEach(() => {

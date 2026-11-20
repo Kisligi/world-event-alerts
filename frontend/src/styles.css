@@ -324,7 +324,7 @@ table.notifications {
   font-size: 0.85rem;
 }
 
-.notifications td:nth-child(4) {
+.notifications td.address {
   overflow-wrap: anywhere;
 }
 
@@ -359,3 +359,135 @@ tr.details pre {
     grid-template-columns: 1fr;
   }
 }
+
+.subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.subnav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.subnav a.active {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+h2 {
+  font-size: 1.2rem;
+}
+
+.user-block,
+.publish-form {
+  margin-bottom: 1rem;
+}
+
+.user-block header,
+.channel-card header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.user-block h2,
+.channel-card h2,
+.publish-form h2 {
+  margin: 0;
+}
+
+.publish-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+table.compact {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+
+.compact th,
+.compact td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.compact th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+td.address {
+  overflow-wrap: anywhere;
+}
+
+.badge.severity-low {
+  color: var(--muted);
+  background: var(--off-bg);
+}
+
+.badge.severity-medium {
+  color: var(--accent);
+  background: var(--off-bg);
+}
+
+.badge.severity-high {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.badge.severity-critical {
+  color: var(--bad);
+  background: var(--bad-bg);
+}
+
+.success {
+  color: var(--ok);
+  background: var(--ok-bg);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0;
+}
+
+.channel-card {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+
+@media (max-width: 700px) {
+  .compact thead {
+    display: none;
+  }
+  .compact tr {
+    display: block;
+    border-bottom: 1px solid var(--border);
+    padding: 0.25rem 0;
+  }
+  .compact td {
+    display: block;
+    border: none;
+    padding: 0.1rem 0;
+  }
+}
+

@@ -61,3 +61,40 @@ export interface Delivery {
   createdAt: string;
   updatedAt: string;
 }
+
+export const DELIVERY_STATUSES: DeliveryStatus[] = ['SENT', 'FAILED', 'SKIPPED', 'PENDING'];
+
+export interface WorldEvent {
+  id: number;
+  source: string;
+  externalId: string | null;
+  category: Category;
+  severity: Severity;
+  title: string;
+  description: string | null;
+  url: string | null;
+  occurredAt: string;
+  receivedAt: string;
+}
+
+/** Body of POST /api/admin/events. */
+export interface PublishEventRequest {
+  category: Category;
+  severity: Severity;
+  title: string;
+  description?: string;
+}
+
+export interface IngestionResult {
+  event: WorldEvent | null;
+  duplicate: boolean;
+  matchedAlertRuleIds: number[];
+}
+
+export interface ChannelStatus {
+  type: ChannelType;
+  enabled: boolean;
+  /** False when the type exists but no channel implementation is deployed. */
+  implemented: boolean;
+}
+

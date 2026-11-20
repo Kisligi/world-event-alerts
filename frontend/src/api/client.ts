@@ -1,4 +1,15 @@
-import type { AlertRule, AlertRuleRequest, Delivery, User } from './types';
+import type {
+  AlertRule,
+  AlertRuleRequest,
+  ChannelStatus,
+  ChannelType,
+  Delivery,
+  DeliveryStatus,
+  IngestionResult,
+  PublishEventRequest,
+  User,
+  WorldEvent,
+} from './types';
 
 /**
  * An error response from the backend. The backend always answers errors with an RFC 9457
@@ -57,6 +68,16 @@ export const api = {
   deleteAlert: (id: number) => request<void>('DELETE', `/api/alerts/${id}`),
   listNotifications: (userId: number, limit = 50) =>
     request<Delivery[]>('GET', `/api/users/${userId}/notifications?limit=${limit}`),
+
+  // Admin (docs/decisions.md ADR-005). Not protected: there is no login (ADR-004).
+  listAllAlerts: () => request<AlertRule[]>('GET', '/api/admin/alerts'),
+  listEvents: (limit = 50) => request<WorldEvent[]>('GET', `/api/events?limit=${limit}`),
+  publishEvent: (event: PublishEventRequest) => request<IngestionResult>('POST', '/api/admin/events', event),
+  listDeliveries: (status?: DeliveryStatus, limit = 100) =>
+    request<Delivery[]>('GET', `/api/admin/deliveries?limit=${limit}${status ? `&status=${status}` : ''}`),
+  listChannels: () => request<ChannelStatus[]>('GET', '/api/admin/channels'),
+  setChannelEnabled: (type: ChannelType, enabled: boolean) =>
+    request<ChannelStatus>('PUT', `/api/admin/channels/${type}`, { enabled }),
 };
 
 /** The request that would recreate this rule; used for edits and for the enable switch. */

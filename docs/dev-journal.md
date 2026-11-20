@@ -166,3 +166,27 @@ Treefa asked for a 15 s simulator interval and a review for memory leaks and out
   - Notifications showed two sent and one "Failed after 3 attempts", with the message and "simulated Slack outage" error when opened ([screenshot](screenshots/m4-notifications.png)).
   - Switched to Bob: empty history. The only browser console error was the expected 400 from the invalid target.
 
+## M5 — Admin UI
+
+**Built**
+- An **Admin** area in the same web app at `/admin`, with four tabs (ADR-033). The "Acting as" switcher is hidden there, because admin pages act on every user.
+  - **Users and alerts:** every user with their rules (read-only), including users without rules.
+  - **Events:** the latest 50 events from every source, and a **"Publish a test event"** form. The answer says how many alerts the event matched; matching alerts are delivered right away.
+  - **Delivery log:** every user's deliveries with a User column, filterable by status; select a row for the message and error.
+  - **Channels:** switch email or Slack off and on for everyone; a switched-off channel records `SKIPPED` deliveries.
+- Backend: one new endpoint, `GET /api/admin/alerts` (every rule, ordered by user). Everything else the admin uses existed since M2 and M3.
+- Shared pieces: the delivery table is now one component (`DeliveryTable`) used by the user's notifications and the admin log; events, the delivery log and notifications refresh every 10 s (`useAutoRefresh`).
+
+**Problems found and fixed**
+- **A wrong expectation in the new integration test.** It expected a rule's categories in the order they were sent (`MARKET, NEWS`); the API returns them in enum order (`NEWS, MARKET`), as it always has. The test was corrected, not the code.
+- **A delivery-log test checked the wrong request.** It asserted the last request sent, which was the user list loading in parallel, not the delivery query. It now picks the delivery requests by route.
+
+**Verified**
+- `./mvnw clean verify`: **148 tests**, 0 failures; JaCoCo line coverage **99.7%** (577/579), branch **99.1%** (116/117). The uncovered lines and branch are the same as at M3.
+- `npm test`: **56 tests**, 0 failures; `tsc --noEmit` (strict) clean; `npm run build` succeeds (278 kB JavaScript, 87 kB gzipped). Coverage: statements and lines **100%**, branches **98.2%** (217/221). The 4 uncovered branches are the defensive ones listed under M4; every admin page is fully covered.
+- **Manual end-to-end run in a real browser** (Playwright, Chromium) against the backend, compose stack and Vite dev server:
+  - Users and alerts showed Alice, Bob and Carol with their rules ([screenshot](screenshots/m5-admin-users-alerts.png)).
+  - Published "M 7.2 earthquake near Tokyo" (disaster, critical): it matched 2 alerts. Published "Stock index falls 6% in early trading" (market, high): it matched 1 alert, Bob's "Market shocks", whose Slack target is under `/services/fail/` ([screenshot](screenshots/m5-admin-events.png)).
+  - Switched Slack off ([screenshot](screenshots/m5-admin-channels.png)), published an aftershock, then switched Slack on again.
+  - The delivery log showed 8 deliveries: Bob's market alert `FAILED` after 3 attempts, the aftershock's Slack message `SKIPPED`, the rest `SENT` ([screenshot](screenshots/m5-admin-delivery-log.png)). The status filter returned 1 failed and 1 skipped row.
+  - No errors in the browser console.

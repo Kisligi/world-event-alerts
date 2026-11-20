@@ -31,6 +31,13 @@ public class AlertRuleController {
         return service.listForUser(userId);
     }
 
+    @GetMapping("/api/admin/alerts")
+    @Operation(summary = "List every user's alert rules (admin)",
+            description = "Ordered by user, then rule. Bounded by the per-user rule limit (ADR-029).")
+    public List<AlertRuleResponse> listAll() {
+        return service.listAll();
+    }
+
     @PostMapping("/api/users/{userId}/alerts")
     @Operation(summary = "Create an alert rule for a user")
     public ResponseEntity<AlertRuleResponse> create(@PathVariable Long userId,

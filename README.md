@@ -4,7 +4,7 @@ Users set up alert rules and get notified by **email** or **Slack** when somethi
 
 This is a one-day prototype built from a deliberately vague product brief. The priority is a well-documented development process: every decision, prompt, correction and shortcut is recorded in [`docs/`](docs/).
 
-> **Status: M4, user UI.** Users pick a demo user, manage their alert rules and see their notification history in a React web app. Simulated events (and optionally real USGS earthquakes) arrive continuously, are matched against the rules, and matching events are sent by email and Slack, with every attempt in a delivery log. The admin UI (M5) and the one-command run (M6) come next; see [Milestones](#milestones).
+> **Status: M5, admin UI.** Users pick a demo user, manage their alert rules and see their notification history in a React web app. An admin area shows every user's alerts, recent events and the full delivery log, and lets the admin publish a test event and switch a channel off. Simulated events (and optionally real USGS earthquakes) arrive continuously, are matched against the rules, and matching events are sent by email and Slack, with every attempt in the delivery log. The one-command run (M6) comes next; see [Milestones](#milestones).
 
 ## The brief
 
@@ -42,7 +42,7 @@ Why these: [`docs/decisions.md`](docs/decisions.md).
 
 **Final goal (M6):** `docker compose up --build`, with Docker as the only prerequisite.
 
-**Now (M4)**, with Docker, JDK 21 and Node.js 22.22 or newer, in three terminals:
+**Now (M5)**, with Docker, JDK 21 and Node.js 22.22 or newer, in three terminals:
 
 ```bash
 # 1. PostgreSQL, Mailpit and WireMock
@@ -59,12 +59,13 @@ Instead of steps 1 and 2, `cd backend && ./mvnw spring-boot:test-run` starts the
 
 Then open:
 - **The web app: http://localhost:5173** ([alerts](docs/screenshots/m4-my-alerts.png), [new alert](docs/screenshots/m4-new-alert-form.png), [notifications](docs/screenshots/m4-notifications.png), [phone width](docs/screenshots/m4-phone.png)). Pick a demo user at the top right ("Acting as"); there is no login.
+- **The admin area: http://localhost:5173/admin** ([users and alerts](docs/screenshots/m5-admin-users-alerts.png), [events and "publish a test event"](docs/screenshots/m5-admin-events.png), [delivery log](docs/screenshots/m5-admin-delivery-log.png), [channels](docs/screenshots/m5-admin-channels.png)). It is open to everyone in this prototype (no login, [T3](docs/tradeoffs.md)).
 - Swagger UI: http://localhost:8080/swagger-ui.html ([screenshot](docs/screenshots/m3-swagger-ui.png))
 - Demo users: http://localhost:8080/api/users
 - Latest events (a simulated one arrives every 15 seconds): http://localhost:8080/api/events
 - Sent emails (Mailpit inbox): http://localhost:8025 ([screenshot](docs/screenshots/m3-mailpit-email.png))
 - Slack messages received by the stand-in (WireMock): http://localhost:8089/__admin/requests
-- Delivery log: http://localhost:8080/api/admin/deliveries
+- Delivery log as JSON: http://localhost:8080/api/admin/deliveries
 
 Or try the API directly:
 
@@ -111,8 +112,8 @@ To see retries and a failed delivery, use a Slack target under `/services/fail/`
 ## How to test
 
 ```bash
-cd backend && ./mvnw clean verify     # backend: 145 tests
-cd frontend && npm ci && npm test     # frontend: 45 tests (npm run coverage for a coverage report)
+cd backend && ./mvnw clean verify     # backend: 148 tests
+cd frontend && npm ci && npm test     # frontend: 56 tests (npm run coverage for a coverage report)
 ```
 
 The backend runs unit tests, web-layer tests and integration tests. The integration tests start real PostgreSQL, Mailpit and WireMock containers with Testcontainers, so **Docker must be running**. `clean` matters after switching branches: compiled classes left in `target/` from another branch can make tests fail that pass on a clean build. Coverage reports: `backend/target/site/jacoco/index.html` and `frontend/coverage/index.html`.
@@ -129,8 +130,8 @@ Each milestone is one commit on `main`. A milestone is done when the code compil
 | M1 | Backend skeleton and alert API | ✅ |
 | M2 | Events and matching | ✅ |
 | M3 | Channels and delivery log | ✅ |
-| M4 | User UI | ✅ this commit |
-| M5 | Admin UI | ⏳ |
+| M4 | User UI | ✅ |
+| M5 | Admin UI | ✅ this commit |
 | M6 | One-command run and final docs | ⏳ |
 
 ## Documentation
