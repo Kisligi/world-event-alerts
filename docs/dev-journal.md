@@ -190,3 +190,27 @@ Treefa asked for a 15 s simulator interval and a review for memory leaks and out
   - Switched Slack off ([screenshot](screenshots/m5-admin-channels.png)), published an aftershock, then switched Slack on again.
   - The delivery log showed 8 deliveries: Bob's market alert `FAILED` after 3 attempts, the aftershock's Slack message `SKIPPED`, the rest `SENT` ([screenshot](screenshots/m5-admin-delivery-log.png)). The status filter returned 1 failed and 1 skipped row.
   - No errors in the browser console.
+
+## M6 — One-command run and final docs
+
+**Built**
+- A multi-stage `Dockerfile`: Node.js builds the web app, a JDK stage puts it into the backend's static resources and packages the jar, and the final image has only the Java runtime, runs as a non-root user and sizes its heap from the container limit (ADR-034).
+- `WebAppController`: forwards the web app's routes (`/notifications`, `/admin`, `/admin/{tab}`) to `index.html`, so reloading or opening a link works; unknown `/api/...` paths stay 404.
+- `compose.yaml`: the `app` service (1 GB memory limit, health check on `/actuator/health`) and `slack-standin-link`, a forwarder that makes `http://localhost:8089` inside the app container reach WireMock (ADR-035). `docker compose up --build` now starts everything; `docker compose up -d postgres mailpit wiremock` still gives the development setup.
+- [`walkthrough.md`](walkthrough.md): a guided tour of the demo and of the code for a new reader. README, architecture, decisions (ADR-034, ADR-035) and trade-offs (T33 to T35; T8 and T26 brought up to date) updated.
+
+**Checked before coding:** the base image tags on Docker Hub (Node.js 22.23.5 on Alpine 3.24, Eclipse Temurin 21.0.13+9 on Ubuntu Noble, `alpine/socat` 1.8.1.1; the newest socat, 1.8.1.3, was 6 days old and not used) and that each is published for amd64 and arm64. The lock file contains the Linux ARM builds of the web app's native build tools, so the image also builds on Apple Silicon.
+
+**Problems found and fixed**
+- **Slack messages could not leave the app container.** Every Slack address the README and the web app suggest is `http://localhost:8089/...`, and inside a container `localhost` is the container itself. Found while planning the compose file, before the first run; confirmed by stopping the forwarder: the delivery failed with a connection error. Options and the choice: ADR-035.
+- **The delivery log said "null" for an unreachable Slack address.** The error read `I/O error on POST request for "...": null`, because the JDK's `ConnectException` has no message. `SlackChannel` now names the exception instead: `ConnectException calling http://...`. Two tests added: an unreachable address, and a timeout that keeps its own message.
+- **Heap headroom.** With a first limit of 768 MB, 75% for the heap left 192 MB for everything else in the JVM (classes, threads, compiled code); the idle app already used 315 MB in total. The limit was raised to 1 GB (heap at most 768 MB).
+
+**Verified**
+- `./mvnw clean verify`: **158 tests**, 0 failures; line coverage **99.7%** (583/585), branch **99.2%** (120/121). The uncovered lines and branch are the same as at M3.
+- Frontend unchanged since M5: 56 tests, type check and build as at M5.
+- **The stack from scratch.** The image was built with `--no-cache` and the stack started with `docker compose up`; the app was healthy after about 17 seconds and used about 300 MB of its 1 GB.
+  - `/`, `/notifications`, `/admin`, `/admin/events`: the web app. `/assets/...`: the JavaScript. `/api/unknown` and `/admin/events/1`: 404 problem details.
+  - In Chromium (Playwright) on port 8080: opened `/admin/deliveries` directly and reloaded it; published events from Admin → Events; switched Slack off and on. Result ([screenshot](screenshots/m6-compose-delivery-log.png)): Alice's email and Slack message sent, Bob's broken Slack target failed after 3 attempts while his email went out, the Slack message during the switch-off skipped. No browser console errors.
+  - Mailpit received the 3 emails; WireMock received the 3 failing attempts and the successful Slack POST.
+- **One honest limit of this check:** this sandbox reaches the internet only through a proxy that build containers cannot use by default. The image was therefore built from a copy of the `Dockerfile` with the proxy and its certificate added to the two build stages; the steps themselves were identical. The committed `Dockerfile` needs no proxy and was not built unchanged here; `docker compose config` validates the compose file.

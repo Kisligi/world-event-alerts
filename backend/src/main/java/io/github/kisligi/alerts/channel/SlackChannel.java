@@ -39,7 +39,19 @@ public class SlackChannel implements NotificationChannel {
                     .retrieve()
                     .toBodilessEntity();
         } catch (RestClientException e) {
-            throw new DeliveryException("Slack webhook call failed: " + e.getMessage(), e);
+            throw new DeliveryException("Slack webhook call failed: " + describe(e, webhookUrl), e);
         }
+    }
+
+    /**
+     * The JDK HTTP client's {@code ConnectException} has no message, so the plain exception
+     * message would end in "null" in the delivery log. Name the exception instead.
+     */
+    private static String describe(RestClientException e, String webhookUrl) {
+        Throwable cause = e.getCause();
+        if (cause != null && cause.getMessage() == null) {
+            return cause.getClass().getSimpleName() + " calling " + webhookUrl;
+        }
+        return e.getMessage();
     }
 }

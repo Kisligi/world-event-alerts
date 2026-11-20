@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: M5.** Implemented: users and alert rules (M1); event sources, ingestion and matching (M2); notification channels, delivery and the delivery log (M3); the user web app (M4); the admin area of the web app (M5). Still planned: the app container in the compose stack (M6). Each section says which. This document is updated at every milestone to match the code.
+> **Status: M6, complete.** Implemented: users and alert rules (M1); event sources, ingestion and matching (M2); notification channels, delivery and the delivery log (M3); the user web app (M4); the admin area of the web app (M5); one container image and the one-command stack (M6). Each section says which milestone added it. For a guided tour of the running demo and of the code, start with [`walkthrough.md`](walkthrough.md).
 
 ## Overview
 
@@ -79,7 +79,7 @@ sequenceDiagram
 
 Every database step runs in its own short transaction and no transaction or connection is held during a network call, so a delivery uses at most one database connection at a time ([`decisions.md`](decisions.md) ADR-023; this was not true in the first M3 version, see [`review-log.md`](review-log.md) R7). Dispatch is synchronous: the thread that ingested the event also sends the notifications ([`tradeoffs.md`](tradeoffs.md) T19).
 
-## Implemented so far (M1–M5)
+## Implemented (M1–M6)
 
 ### Code layout
 
@@ -98,13 +98,16 @@ backend/src/main/java/io/github/kisligi/alerts/
 ├── matching/    AlertMatcher: the matching rules in one place
 ├── channel/     NotificationChannel interface, EmailChannel, SlackChannel,
 │                channel on/off settings and their admin API
-└── delivery/    DeliveryDispatcher (dedup, retries), NotificationFormatter,
-                 Delivery entity (the delivery log), notification and delivery-log API
+├── delivery/    DeliveryDispatcher (dedup, retries), NotificationFormatter,
+│                Delivery entity (the delivery log), notification and delivery-log API
+└── web/         WebAppController: serves the web app's page for its routes (M6)
 backend/src/main/resources/
 ├── application.yaml                   config; every value overridable by env var
 └── db/migration/                      Flyway: V1 users and rules, V2 demo users, V3 events,
                                        V4 deliveries and channel settings
 infra/wiremock/mappings/               Slack stand-in stubs, shared by compose and the tests
+Dockerfile                             one image: builds the web app and the backend (M6)
+compose.yaml                           the whole demo: app, PostgreSQL, Mailpit, WireMock (M6)
 ```
 
 ### REST API
@@ -266,15 +269,16 @@ Flyway owns the schema; Hibernate runs with `ddl-auto: validate`, so the app ref
 | `NotificationFormatterTest` | unit | subject with severity and category, every detail in the body, no empty lines when description or URL are missing |
 | `EmailChannelTest` | unit, Mockito | recipient, sender, subject and body of the mail; SMTP failure becomes a `DeliveryException` |
 | `EmailTimeoutTest` | `ApplicationContextRunner` with the real `application.yaml`, a socket that never answers | the shipped SMTP timeouts are set, and a send to a silent server fails instead of hanging |
-| `SlackChannelTest` | unit, `MockRestServiceServer` | POST to the webhook URL with the exact JSON body; an HTTP error becomes a `DeliveryException` (the integration test checks the status and body in the logged error) |
+| `SlackChannelTest` | unit, `MockRestServiceServer` and a closed port | POST to the webhook URL with the exact JSON body; an HTTP error becomes a `DeliveryException` (the integration test checks the status and body in the logged error); an unreachable address is named in the error instead of "null"; a timeout keeps its message |
 | `ChannelSettingServiceTest` | unit, Mockito | missing setting counts as on, switching on and off, `implemented` flag |
 | `ChannelControllerTest` | `@WebMvcTest` | list and switch channels, unknown type and missing `enabled` as problem details |
 | `DeliveryDispatcherTest` | unit, fake channel | one delivery per target, existing delivery not sent again, concurrent insert treated as duplicate, retry with exact back-off waits until success, `FAILED` after the last attempt, error without message, `SKIPPED` when off, no implementation, rule or event deleted since matching, interrupted retries, over-long error cut to fit |
 | `DeliveryControllerTest` | `@WebMvcTest` | notification history and delivery log, status filter, `limit` bounds, unknown user 404 |
 | `DeliveryIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL, Mailpit, WireMock | the email arrives in Mailpit and the Slack POST reaches WireMock; the same source event received twice notifies once; a broken webhook is tried 3 times then `FAILED` while the email still goes out; switched-off channel is `SKIPPED` and nothing is sent; history kept after the rule is deleted |
 | `DeliveryConcurrencyIntegrationTest` | `@SpringBootTest` + Testcontainers, connection pool of 2 | 4 events ingested in parallel with a slow (1 s) Slack stand-in are all stored and delivered; regression test for the pool starvation found in the M3 review |
+| `WebAppControllerTest` | `@WebMvcTest` | every web app route opens the app's page; unknown paths, including unknown `/api/...` paths, stay 404 |
 
-148 tests; line coverage 99.7% (577/579), branch coverage 99.1% (116/117) (JaCoCo). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
+158 tests; line coverage 99.7% (583/585), branch coverage 99.2% (120/121) (JaCoCo). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
 
 ### Web app (M4, M5)
 
@@ -312,7 +316,7 @@ The admin area is open to everyone, like the rest of the app (no login, ADR-004,
 
 **Errors.** The backend always answers errors as problem details (ADR-014). `api/client.ts` turns them into an `ApiError` carrying `detail` and the `errors` list, and `ErrorMessage` shows both. A backend that cannot be reached shows "The server cannot be reached. Is the backend running?". The form checks only what the user can fix at a glance (name, at least one category, an address for every target); all other rules are enforced, once, by the backend.
 
-**One origin.** In development, Vite's dev server (port 5173) forwards `/api` to the backend (`BACKEND_URL`, default `http://localhost:8080`). In M6 the backend will serve the built app itself. Either way the browser sees a single origin, so no CORS configuration is needed.
+**One origin.** In development, Vite's dev server (port 5173) forwards `/api` to the backend (`BACKEND_URL`, default `http://localhost:8080`). In the container (M6) the backend serves the built app itself (`WebAppController`, ADR-034). Either way the browser sees a single origin, so no CORS configuration is needed.
 
 #### Frontend tests
 
@@ -391,10 +395,42 @@ This is what "flexible enough that we can add more channels later" means in this
 
 If step 3 is forgotten, nothing crashes: deliveries to `TEAMS` targets are recorded as `FAILED` with "No channel implementation for TEAMS", and the admin channel list shows `implemented: false`.
 
-## Deployment (target, M6; infrastructure part done in M3)
+## Deployment (M6)
 
-Since M3, `compose.yaml` starts PostgreSQL, Mailpit and WireMock; the app still runs from Maven.
+`docker compose up --build` starts the whole demo; Docker is the only prerequisite and no API keys or accounts are needed. The web app, the API and Swagger UI are all on http://localhost:8080.
 
-`docker compose up --build` builds the app image (multi-stage: Node builds the SPA, Maven builds the jar) and starts it with PostgreSQL, Mailpit and WireMock. No API keys or accounts are needed.
+```mermaid
+flowchart LR
+    BROWSER[Browser]
+    subgraph Compose["docker compose"]
+        subgraph AppNet["app container network"]
+            APP["app<br/>Spring Boot + built web app<br/>:8080, memory limit 1 GB"]
+            LINK["slack-standin-link<br/>socat, localhost:8089"]
+        end
+        PG[(postgres :5432)]
+        MP["mailpit<br/>SMTP :1025, inbox :8025"]
+        WM["wiremock<br/>:8089 on the host"]
+    end
+    BROWSER -->|":8080 web app + API"| APP
+    BROWSER -->|":8025 inbox"| MP
+    BROWSER -->|":8089 recorded requests"| WM
+    APP --> PG
+    APP -->|SMTP| MP
+    APP -->|"http://localhost:8089/services/..."| LINK
+    LINK --> WM
+```
+
+**The image** ([`Dockerfile`](../Dockerfile), ADR-034) is built in three stages:
+1. **Node.js** installs the locked packages and runs `npm run build` (type check, then Vite build).
+2. **JDK** downloads the Maven dependencies in their own cached layer, copies the built web app into `src/main/resources/static/` and packages the jar. Tests are not run here ([`tradeoffs.md`](tradeoffs.md) T33).
+3. **Java runtime only**, running as a non-root user, with `-XX:MaxRAMPercentage=75`: the heap may use 75% of the container's 1 GB limit (768 MB) instead of the JVM's default 25%.
+
+Spring Boot serves `index.html` for `/` and the JavaScript and CSS files from `static/`. `WebAppController` forwards the web app's other routes (`/notifications`, `/admin`, `/admin/{tab}`) to `index.html`, so reloading a page or opening a link works. The routes are listed rather than "everything unknown", so an unknown `/api/...` path is still a 404 problem detail.
+
+**The Slack stand-in link** (ADR-035). Users enter Slack addresses such as `http://localhost:8089/services/demo`, which is where WireMock is on their machine. Inside the app container, `localhost` is the container itself. A small `socat` container shares the app container's network and forwards its `localhost:8089` to WireMock, so the same address works from the app and from the browser, and nothing in the code knows about the demo.
+
+**Configuration:** compose sets only `DB_URL` and `MAIL_HOST` (the service names); everything else uses the defaults in `application.yaml` and can be overridden with the environment variables listed in the [README](../README.md#how-to-run). The database has no volume, so `docker compose down` resets the demo ([`tradeoffs.md`](tradeoffs.md) T34).
+
+**Development** runs without the app container: `docker compose up -d postgres mailpit wiremock`, then the backend with Maven and the web app with Vite (README).
 
 See [`decisions.md`](decisions.md) for why each part was chosen.

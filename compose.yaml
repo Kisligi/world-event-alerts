@@ -1,6 +1,9 @@
-# Local infrastructure for World Event Alerts.
-# M3: PostgreSQL, Mailpit (test SMTP server + web inbox) and WireMock (Slack stand-in).
-# M6 adds the app itself, so that `docker compose up --build` starts everything.
+# World Event Alerts: the whole demo with one command (docs/decisions.md ADR-034, ADR-035).
+#
+#   docker compose up --build        then open http://localhost:8080
+#
+# For development (backend and web app run on your machine, see README), start only the
+# infrastructure:  docker compose up -d postgres mailpit wiremock
 #
 # The credentials below are demo values for a throwaway local database, not secrets.
 services:
@@ -34,3 +37,41 @@ services:
       - "8089:8080"
     volumes:
       - ./infra/wiremock/mappings:/home/wiremock/mappings:ro
+
+  # The app: API, background event sources and the web app, all on http://localhost:8080.
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/alerts
+      MAIL_HOST: mailpit
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    # The JVM sizes its heap from this limit (75%, see Dockerfile).
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Inside the app container "localhost" is the container itself, so a Slack target such as
+  # http://localhost:8089/services/demo (the address the README and the web app suggest) would
+  # not reach WireMock. This forwarder shares the app container's network and passes its
+  # localhost:8089 on to WireMock, so the same address works from the app and from the browser.
+  slack-standin-link:
+    image: alpine/socat:1.8.1.1
+    network_mode: service:app
+    command: TCP-LISTEN:8089,fork,reuseaddr TCP:wiremock:8080
+    depends_on:
+      app:
+        condition: service_started
+      wiremock:
+        condition: service_started

@@ -5,8 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.SocketTimeoutException;
 
 import io.github.kisligi.alerts.common.ChannelType;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,5 +56,29 @@ class SlackChannelTest {
         assertThatThrownBy(() -> channel.send(WEBHOOK, new Notification("s", "b")))
                 .isInstanceOf(DeliveryException.class)
                 .hasMessageStartingWith("Slack webhook call failed");
+    }
+
+    @Test
+    void unreachableWebhookNamesTheConnectionErrorInsteadOfNull() throws IOException {
+        int closedPort;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            closedPort = socket.getLocalPort();
+        }
+        String url = "http://localhost:" + closedPort + "/services/x";
+        SlackChannel realClient = new SlackChannel(RestClient.builder());
+
+        assertThatThrownBy(() -> realClient.send(url, new Notification("s", "b")))
+                .isInstanceOf(DeliveryException.class)
+                .hasMessage("Slack webhook call failed: ConnectException calling " + url);
+    }
+
+    @Test
+    void timeoutKeepsItsOwnMessage() {
+        server.expect(requestTo(WEBHOOK)).andRespond(withException(new SocketTimeoutException("Read timed out")));
+
+        assertThatThrownBy(() -> channel.send(WEBHOOK, new Notification("s", "b")))
+                .isInstanceOf(DeliveryException.class)
+                .hasMessageStartingWith("Slack webhook call failed: I/O error on POST request")
+                .hasMessageEndingWith("Read timed out");
     }
 }

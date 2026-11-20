@@ -4,7 +4,9 @@ Users set up alert rules and get notified by **email** or **Slack** when somethi
 
 This is a one-day prototype built from a deliberately vague product brief. The priority is a well-documented development process: every decision, prompt, correction and shortcut is recorded in [`docs/`](docs/).
 
-> **Status: M5, admin UI.** Users pick a demo user, manage their alert rules and see their notification history in a React web app. An admin area shows every user's alerts, recent events and the full delivery log, and lets the admin publish a test event and switch a channel off. Simulated events (and optionally real USGS earthquakes) arrive continuously, are matched against the rules, and matching events are sent by email and Slack, with every attempt in the delivery log. The one-command run (M6) comes next; see [Milestones](#milestones).
+> **Status: complete (M6).** `docker compose up --build` starts the whole demo with Docker as the only prerequisite. Users pick a demo user, manage their alert rules and see their notification history in a React web app. An admin area shows every user's alerts, recent events and the full delivery log, and lets the admin publish a test event and switch a channel off. Simulated events (and optionally real USGS earthquakes) arrive continuously, are matched against the rules, and matching events are sent by email and Slack, with every attempt in the delivery log.
+>
+> **New here?** Read [`docs/walkthrough.md`](docs/walkthrough.md): a 10-minute tour of the running demo, then of the code.
 
 ## The brief
 
@@ -12,7 +14,7 @@ This is a one-day prototype built from a deliberately vague product brief. The p
 
 That was the only input. How it became a concrete scope is documented in [`docs/planning/`](docs/planning/) and [`docs/decisions.md`](docs/decisions.md).
 
-## What we are building
+## What it does
 
 - **Alert rules:** a user picks categories (news, market, disaster), optional keywords and a minimum severity, and where to be notified (email address, Slack webhook URL).
 - **Events:** a built-in simulator produces realistic sample events; an admin can publish one by hand. An optional real feed (USGS earthquakes, no API key) can be switched on.
@@ -29,7 +31,8 @@ backend/         Spring Boot service (Maven, Java 21)
 frontend/        React web app (TypeScript, Vite, npm)
 docs/            All documentation, planning materials and screenshots
 infra/           Configuration for local stand-ins (WireMock stubs for Slack)
-compose.yaml     Local infrastructure: PostgreSQL, Mailpit, WireMock (the app joins in M6)
+Dockerfile       Builds the web app and the backend into one image
+compose.yaml     The whole demo: the app, PostgreSQL, Mailpit and WireMock
 ```
 
 ## Tech stack
@@ -40,34 +43,44 @@ Why these: [`docs/decisions.md`](docs/decisions.md).
 
 ## How to run
 
-**Final goal (M6):** `docker compose up --build`, with Docker as the only prerequisite.
+With **Docker** (Docker Desktop, or Docker Engine with the Compose plugin) as the only prerequisite:
 
-**Now (M5)**, with Docker, JDK 21 and Node.js 22.22 or newer, in three terminals:
+```bash
+docker compose up --build
+```
+
+The first build downloads the Node.js and Maven dependencies and takes a few minutes; later starts take seconds. The app is ready when the log shows `Started WorldEventAlertsApplication` (or `docker compose ps` shows `app` as `healthy`). Then open:
+
+- **The web app: http://localhost:8080** ([alerts](docs/screenshots/m4-my-alerts.png), [new alert](docs/screenshots/m4-new-alert-form.png), [notifications](docs/screenshots/m4-notifications.png), [phone width](docs/screenshots/m4-phone.png)). Pick a demo user at the top right ("Acting as"); there is no login.
+- **The admin area: http://localhost:8080/admin** ([users and alerts](docs/screenshots/m5-admin-users-alerts.png), [events and "publish a test event"](docs/screenshots/m5-admin-events.png), [delivery log](docs/screenshots/m5-admin-delivery-log.png), [channels](docs/screenshots/m5-admin-channels.png)). It is open to everyone in this prototype (no login, [T3](docs/tradeoffs.md)).
+- Sent emails (Mailpit inbox): http://localhost:8025 ([screenshot](docs/screenshots/m3-mailpit-email.png))
+- Slack messages received by the stand-in (WireMock): http://localhost:8089/__admin/requests
+- Swagger UI: http://localhost:8080/swagger-ui.html ([screenshot](docs/screenshots/m3-swagger-ui.png))
+
+The ports 8080, 5432, 1025, 8025 and 8089 must be free. Stop with `Ctrl+C`. `docker compose down` removes the containers and **resets the demo data** (the database has no volume; `docker compose stop` keeps it).
+
+The demo starts with three users and no alerts. A quick path through it: as Alice, create an alert for the category "Disaster" with the keyword `earthquake`, the email target and a Slack target `http://localhost:8089/services/demo`; then in Admin → Events publish "M 7.2 earthquake near Tokyo". The email appears in Mailpit, the Slack message in WireMock, and both in Notifications and in the delivery log. More in [`docs/walkthrough.md`](docs/walkthrough.md).
+
+### Development setup
+
+To work on the code, run the backend and the web app on your machine (JDK 21, Node.js 22.22 or newer) and only the infrastructure in Docker:
 
 ```bash
 # 1. PostgreSQL, Mailpit and WireMock
-docker compose up -d
+docker compose up -d postgres mailpit wiremock
 
-# 2. The backend
+# 2. The backend on port 8080
 cd backend && ./mvnw spring-boot:run
 
-# 3. The web app (the dev server forwards /api calls to the backend on port 8080)
+# 3. The web app with live reload on http://localhost:5173 (forwards /api calls to port 8080)
 cd frontend && npm ci && npm run dev
 ```
 
 Instead of steps 1 and 2, `cd backend && ./mvnw spring-boot:test-run` starts the backend with its own throwaway PostgreSQL, Mailpit and WireMock (Testcontainers, on random ports; `docker ps` shows them).
 
-Then open:
-- **The web app: http://localhost:5173** ([alerts](docs/screenshots/m4-my-alerts.png), [new alert](docs/screenshots/m4-new-alert-form.png), [notifications](docs/screenshots/m4-notifications.png), [phone width](docs/screenshots/m4-phone.png)). Pick a demo user at the top right ("Acting as"); there is no login.
-- **The admin area: http://localhost:5173/admin** ([users and alerts](docs/screenshots/m5-admin-users-alerts.png), [events and "publish a test event"](docs/screenshots/m5-admin-events.png), [delivery log](docs/screenshots/m5-admin-delivery-log.png), [channels](docs/screenshots/m5-admin-channels.png)). It is open to everyone in this prototype (no login, [T3](docs/tradeoffs.md)).
-- Swagger UI: http://localhost:8080/swagger-ui.html ([screenshot](docs/screenshots/m3-swagger-ui.png))
-- Demo users: http://localhost:8080/api/users
-- Latest events (a simulated one arrives every 15 seconds): http://localhost:8080/api/events
-- Sent emails (Mailpit inbox): http://localhost:8025 ([screenshot](docs/screenshots/m3-mailpit-email.png))
-- Slack messages received by the stand-in (WireMock): http://localhost:8089/__admin/requests
-- Delivery log as JSON: http://localhost:8080/api/admin/deliveries
+### Try the API
 
-Or try the API directly:
+The same works with `curl` (both setups use port 8080):
 
 ```bash
 curl -X POST localhost:8080/api/users/1/alerts -H 'Content-Type: application/json' -d '{
@@ -88,7 +101,9 @@ curl -X POST localhost:8080/api/admin/events -H 'Content-Type: application/json'
 }'
 ```
 
-**Event sources** are configured with environment variables:
+### Configuration
+
+**Event sources** are configured with environment variables (with Docker, add them under `app.environment` in `compose.yaml`):
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
@@ -112,7 +127,7 @@ To see retries and a failed delivery, use a Slack target under `/services/fail/`
 ## How to test
 
 ```bash
-cd backend && ./mvnw clean verify     # backend: 148 tests
+cd backend && ./mvnw clean verify     # backend: 158 tests
 cd frontend && npm ci && npm test     # frontend: 56 tests (npm run coverage for a coverage report)
 ```
 
@@ -122,7 +137,7 @@ The frontend tests render the real app in a simulated browser (jsdom) and replac
 
 ## Milestones
 
-Each milestone is one commit on `main`. A milestone is done when the code compiles, all tests pass and the related docs are updated.
+Each milestone was reviewed on its own branch and then fast-forwarded onto `main`; changes requested in review are extra commits. A milestone is done when the code compiles, all tests pass and the related docs are updated.
 
 | # | Milestone | Status |
 |---|-----------|--------|
@@ -131,17 +146,18 @@ Each milestone is one commit on `main`. A milestone is done when the code compil
 | M2 | Events and matching | ✅ |
 | M3 | Channels and delivery log | ✅ |
 | M4 | User UI | ✅ |
-| M5 | Admin UI | ✅ this commit |
-| M6 | One-command run and final docs | ⏳ |
+| M5 | Admin UI | ✅ |
+| M6 | One-command run and final docs | ✅ this commit |
 
 ## Documentation
 
 | Document | What it contains |
 |----------|------------------|
+| [`docs/walkthrough.md`](docs/walkthrough.md) | Start here: a guided tour of the running demo, then of the code |
 | [`docs/process.md`](docs/process.md) | How we work: ground rules, milestone definition, approval flow |
 | [`docs/decisions.md`](docs/decisions.md) | Architecture decision records: what we chose, the alternatives, and why |
 | [`docs/tradeoffs.md`](docs/tradeoffs.md) | Every shortcut taken for time or scope, and how to improve it later |
-| [`docs/architecture.md`](docs/architecture.md) | How the system is (or will be) structured |
+| [`docs/architecture.md`](docs/architecture.md) | How the system is structured: components, API, data, tests, deployment |
 | [`docs/prompt-log.md`](docs/prompt-log.md) | The full prompt history, verbatim |
 | [`docs/review-log.md`](docs/review-log.md) | Every correction or change request on Claude's proposals |
 | [`docs/dev-journal.md`](docs/dev-journal.md) | Per-milestone notes: what was built, problems met, how it was verified |
