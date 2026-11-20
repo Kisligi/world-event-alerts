@@ -73,7 +73,7 @@ curl -X POST localhost:8080/api/users/1/alerts -H 'Content-Type: application/jso
 cd backend && ./mvnw verify
 ```
 
-Runs unit tests, web-layer tests and integration tests. The integration tests start a real PostgreSQL with Testcontainers, so **Docker must be running**.
+Runs unit tests, web-layer tests and integration tests (48 tests). The integration tests start a real PostgreSQL with Testcontainers, so **Docker must be running**. A coverage report is written to `backend/target/site/jacoco/index.html`. Testing rules: [`docs/process.md`](docs/process.md#testing-standard).
 
 ## Milestones
 

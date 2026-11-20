@@ -90,6 +90,59 @@ class AlertRuleServiceTest {
     }
 
     @Test
+    void listForUnknownUserIsNotFoundInsteadOfEmpty() {
+        // An empty list would hide a wrong user id in the UI; 404 makes it visible.
+        when(users.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.listForUser(99L)).isInstanceOf(NotFoundException.class);
+        verify(rules, never()).findAllByUserIdOrderByIdAsc(any());
+    }
+
+    @Test
+    void listForUserReturnsThatUsersRules() {
+        AppUser alice = new AppUser("Alice", "alice@example.com");
+        AlertRule rule = new AlertRule(alice);
+        rule.setName("Quakes");
+        when(users.findById(1L)).thenReturn(Optional.of(alice));
+        when(rules.findAllByUserIdOrderByIdAsc(1L)).thenReturn(List.of(rule));
+
+        assertThat(service.listForUser(1L)).extracting(AlertRuleResponse::name).containsExactly("Quakes");
+    }
+
+    @Test
+    void updateOfMissingRuleIsNotFoundAndSavesNothing() {
+        when(rules.findById(8L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.update(8L, validRequest())).isInstanceOf(NotFoundException.class);
+        verify(rules, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateReplacesCollectionsInsteadOfMerging() {
+        AlertRule existing = new AlertRule(new AppUser("Alice", "alice@example.com"));
+        existing.replaceKeywords(Set.of("old"));
+        existing.replaceTargets(Set.of(new ChannelTarget(ChannelType.SLACK, "https://hooks.example.com/x")));
+        when(rules.findById(5L)).thenReturn(Optional.of(existing));
+        when(rules.saveAndFlush(existing)).thenReturn(existing);
+
+        AlertRuleResponse updated = service.update(5L, request("Quakes", Set.of("new"),
+                new AlertRuleRequest.Target(ChannelType.EMAIL, "alice@example.com"), true));
+
+        assertThat(updated.keywords()).containsExactly("new");
+        assertThat(updated.targets()).containsExactly(new ChannelTarget(ChannelType.EMAIL, "alice@example.com"));
+    }
+
+    @Test
+    void deleteRemovesExistingRule() {
+        AlertRule existing = new AlertRule(new AppUser("Alice", "alice@example.com"));
+        when(rules.findById(5L)).thenReturn(Optional.of(existing));
+
+        service.delete(5L);
+
+        verify(rules).delete(existing);
+    }
+
+    @Test
     void deleteOfMissingRuleIsNotFound() {
         when(rules.findById(7L)).thenReturn(Optional.empty());
 

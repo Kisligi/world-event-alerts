@@ -59,6 +59,7 @@ Decided by: Treefa, on Claude's proposals. Date: 2026-11-20.
 - **Decision:** One commit per milestone directly on `main`, each after Treefa approves the change summary and commit message. Public repository `world-event-alerts`, MIT license.
 - **Alternatives:** a feature branch and pull request per milestone.
 - **Why:** "I'm the only developer on this project and I review and test the code before every commit and push" (Treefa). The approval step is the review; `main` stays linear, and every commit is a working rollback point.
+- **Amended (M1, [`review-log.md`](review-log.md) R5):** every milestone is first pushed to its own review branch (`m1-review`, `m2-review`, …) for local testing; after approval `main` is fast-forwarded to it. Still no pull requests and no merge commits.
 
 ## ADR-010 — Spring Boot 4.1.3
 

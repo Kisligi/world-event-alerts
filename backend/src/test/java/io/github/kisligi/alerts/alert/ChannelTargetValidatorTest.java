@@ -30,14 +30,16 @@ class ChannelTargetValidatorTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "https://hooks.slack.com/services/T000/B000/XXXX",
-            "http://slack-mock:8080/services/demo"})
+            "http://slack-mock:8080/services/demo",
+            "HTTPS://hooks.slack.com/services/T000/B000/XXXX"})
     void acceptsHttpWebhookUrls(String address) {
         assertThatCode(() -> validator.validate(new ChannelTarget(ChannelType.SLACK, address)))
                 .doesNotThrowAnyException();
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"alice@example.com", "ftp://example.com/hook", "not a url", "https://"})
+    @ValueSource(strings = {"alice@example.com", "ftp://example.com/hook", "not a url", "https://",
+            "http:///no-host"})
     void rejectsNonHttpWebhookUrls(String address) {
         assertThatThrownBy(() -> validator.validate(new ChannelTarget(ChannelType.SLACK, address)))
                 .isInstanceOf(InvalidRequestException.class)

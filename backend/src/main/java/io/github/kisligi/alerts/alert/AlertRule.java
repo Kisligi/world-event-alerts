@@ -1,6 +1,7 @@
 package io.github.kisligi.alerts.alert;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -82,13 +83,21 @@ public class AlertRule {
 
     @PrePersist
     void onCreate() {
-        createdAt = Instant.now();
+        createdAt = now();
         updatedAt = createdAt;
     }
 
     @PreUpdate
     void onUpdate() {
-        updatedAt = Instant.now();
+        updatedAt = now();
+    }
+
+    /**
+     * PostgreSQL stores timestamps with microsecond precision. Truncating here keeps the value
+     * returned right after a save identical to the value read back from the database later.
+     */
+    private static Instant now() {
+        return Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     public Long getId() {

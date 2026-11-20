@@ -135,3 +135,29 @@ Spring Boot line: **Spring Boot 4.1.3**.
 > go
 
 **Response:** committed `b170acb` and pushed `main` (M0). Then implemented milestone M1: Spring Boot backend, user and alert rule REST API, Flyway schema, 28 tests including a Testcontainers PostgreSQL integration test. See [`dev-journal.md`](dev-journal.md).
+
+---
+
+## Prompt 10 — Treefa, 12:19 (before approving M1)
+
+> Before I approve, push these changes to a separate branch called m1-review (do not touch main) so I can pull and test them locally.
+
+**Response:** committed M1 as `a15f180` on the new branch `m1-review` and pushed it; `main` stayed at `b170acb`. Logged as [`review-log.md`](review-log.md) R5.
+
+---
+
+## Prompt 11 — Treefa, 12:35 (M1 review)
+
+> Okay. I can see the code works, the tests pass, and Swagger is working.
+> For every change, make sure you write meaningful tests and aim for as much test coverage as possible. But it's very important that these are real, meaningful tests, not ones written just to increase coverage. (For example, right now there's no test that covers the call to "handleInvalid".)
+
+**Response:** added JaCoCo coverage reporting and 20 behaviour-focused tests; one of them found and led to fixing a timestamp precision bug. Logged as [`review-log.md`](review-log.md) R6; testing standard added to [`process.md`](process.md).
+
+---
+
+## Prompt 12 — Treefa, 12:43 (approval of the M1 test commit)
+
+> Yes, should every future milestone also go to its own review branch first, because I want to test first locally.
+> You can update the m1-review with the new changes.
+
+**Response:** made the review branch a rule for every milestone in [`process.md`](process.md) and ADR-009, then committed the M1 test changes on `m1-review` and pushed.

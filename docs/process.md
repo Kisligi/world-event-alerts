@@ -24,11 +24,21 @@ The verbatim text is the first entry in [`prompt-log.md`](prompt-log.md).
 
 ## How a milestone is delivered
 
-1. Claude implements the milestone and runs the build and all tests.
+1. Claude implements the milestone, with meaningful tests (see [Testing standard](#testing-standard)), and runs the build and all tests.
 2. Claude updates the related docs (README, architecture, decisions, trade-offs, logs).
 3. Claude shows Treefa a change summary and the proposed commit message.
-4. Treefa reviews and tests, then approves or asks for changes (changes are logged in `review-log.md`).
-5. Only after approval: one commit directly on `main`, then push.
+4. Claude pushes the commit to the milestone's own review branch (`m1-review`, `m2-review`, …) so Treefa can pull and test it locally first; `main` is not touched. This applies to every milestone from M1 on ([`review-log.md`](review-log.md) R5).
+5. Treefa reviews and tests, then approves or asks for changes (changes are logged in `review-log.md`). Requested changes go on the review branch as additional commits, again only after approval.
+6. Only after final approval: `main` is fast-forwarded to the reviewed commit(s) and pushed. No merge commits and no history rewriting, so every commit on `main` is exactly what was tested.
+
+## Testing standard
+
+Set by Treefa during the M1 review ([`review-log.md`](review-log.md) R6):
+
+- Every change comes with tests, and coverage should be as high as possible.
+- **Tests must be real and meaningful**: each one checks a behaviour someone relies on (a status code, an error message, a stored value, a rule), not just that a line ran. No tests written only to raise the number.
+- Coverage is measured with JaCoCo on every `./mvnw verify` (report: `backend/target/site/jacoco/index.html`). It is reported, not enforced as a gate, so the number never becomes the goal.
+- Whatever stays uncovered is listed in [`dev-journal.md`](dev-journal.md) with the reason it is not worth a test.
 
 ### Commit message convention
 

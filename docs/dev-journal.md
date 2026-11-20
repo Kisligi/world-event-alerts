@@ -14,6 +14,8 @@ Per-milestone notes: what was built, what came up along the way, and how the res
 
 ## M1 — Backend skeleton and alert API
 
+First version pushed for review on `m1-review` as `a15f180` (12:19); review round below.
+
 **Built**
 - Maven project in `backend/` on Spring Boot 4.1.3 / Java 21, with Maven wrapper (script-only, Maven 3.9.11).
 - Entities `AppUser`, `AlertRule` (with `ChannelTarget` value objects), Flyway migrations `V1` (schema) and `V2` (three demo users).
@@ -33,3 +35,26 @@ Per-milestone notes: what was built, what came up along the way, and how the res
 **Verified**
 - `./mvnw verify`: 28 tests, 0 failures (unit, `@WebMvcTest`, and integration against PostgreSQL 17 via Testcontainers).
 - Manual smoke test: `docker compose up -d postgres`, ran the packaged jar, then `GET /actuator/health` → `UP`; `GET /api/users` → 3 demo users; `POST` a valid alert → 201; `POST` a Slack target `"nope"` → 400 problem detail; Swagger UI → 200 ([screenshot](screenshots/m1-swagger-ui.png)).
+
+**Review round (12:35, [`review-log.md`](review-log.md) R6)**
+
+Treefa pointed out that `ApiExceptionHandler.handleInvalid` was never exercised. Added JaCoCo, then looked for *behaviour* that no test checked, not just uncovered lines:
+
+| Added test | Behaviour it pins down |
+|------------|------------------------|
+| `AlertRuleControllerTest.businessRuleViolationFromServiceReturns400ProblemDetail` | a service-level rule violation becomes a 400 `application/problem+json` with the service's message (`handleInvalid`) |
+| `AlertRuleControllerTest.rejectsRequestThatBreaksOneConstraint` (6 cases) | each request limit (name length, keyword count, blank keyword, target count, missing type, blank address) is enforced and reported against the right field |
+| `AlertRuleControllerTest.malformedJsonReturns400`, `updateValidatesBodyLikeCreate`, `getExistingRuleReturnsIt` | broken JSON is a 400; PUT is validated like POST; timestamps are serialized as ISO-8601 strings |
+| `AlertRuleServiceTest` (5 new) | unknown user is a 404 rather than an empty list; update replaces collections instead of merging; missing rule on update saves nothing; delete really deletes |
+| `ChannelTargetValidatorTest` (2 new cases) | upper-case `HTTPS://` is accepted; a URL without a host is rejected |
+| `AlertApiIntegrationTest` (3 new, 3 extended) | business-rule 400 end to end and nothing stored; users only see their own rules; deleting a rule leaves no orphan rows; `createdAt` stays fixed and `updatedAt` moves on update; POST for an unknown user is a 404; API title |
+
+**Bug found by the new tests:** `createdAt` returned by `POST` had nanosecond precision (`…958703115Z`), but PostgreSQL keeps microseconds, so a later `GET` or `PUT` returned `…958703Z` for the same rule. Clients comparing timestamps would see the value change. Fixed by truncating timestamps to microseconds in `AlertRule`.
+
+**Integration tests are now independent:** each one starts by deleting all alert rules, so test order no longer matters.
+
+**Coverage** (JaCoCo, `./mvnw verify`): 48 tests. Lines 97.1% → **98.9%** (173/175), branches 88.9% → **96.3%** (26/27).
+
+Still uncovered, on purpose:
+- `WorldEventAlertsApplication.main` (2 lines): only calls `SpringApplication.run`; it is exercised every time the app is started (smoke test above), and a unit test would only re-test Spring.
+- One branch of the `switch` in `ChannelTargetValidator`: a hidden branch the compiler adds for a `null` enum value, which cannot happen because Bean Validation rejects a missing `type` first (tested in `rejectsRequestThatBreaksOneConstraint`).

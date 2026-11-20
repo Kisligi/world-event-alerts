@@ -132,10 +132,12 @@ Flyway owns the schema; Hibernate runs with `ddl-auto: validate`, so the app ref
 | Test class | Kind | What it covers |
 |------------|------|----------------|
 | `SeverityTest` | unit | severity ranking |
-| `ChannelTargetValidatorTest` | unit (parameterized) | valid and invalid email addresses and webhook URLs |
-| `AlertRuleServiceTest` | unit, Mockito | normalization, defaults, unknown user, bad target, update, delete |
-| `AlertRuleControllerTest` | `@WebMvcTest` | status codes, `Location` header, validation errors, problem-detail format |
-| `AlertApiIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL | Flyway migrations, seeded users, full create/list/update/delete cycle, OpenAPI document |
+| `ChannelTargetValidatorTest` | unit (parameterized) | valid and invalid email addresses and webhook URLs (scheme case, missing host) |
+| `AlertRuleServiceTest` | unit, Mockito | normalization, defaults, unknown user (create and list), bad target, update replaces collections, update/delete of missing rule, delete |
+| `AlertRuleControllerTest` | `@WebMvcTest` | status codes, `Location` header, every request constraint, malformed JSON, business-rule 400 and 404 problem details, ISO timestamps |
+| `AlertApiIntegrationTest` | `@SpringBootTest` + Testcontainers PostgreSQL | Flyway migrations, seeded users, full create/read/update/delete cycle with timestamps, per-user isolation, invalid target not stored, no orphan rows after delete, OpenAPI document |
+
+48 tests; line coverage 98.9%, branch coverage 96.3% (JaCoCo). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
 
 ## Domain model (full target; ✅ = implemented)
 
