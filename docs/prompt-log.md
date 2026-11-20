@@ -161,3 +161,11 @@ Spring Boot line: **Spring Boot 4.1.3**.
 > You can update the m1-review with the new changes.
 
 **Response:** made the review branch a rule for every milestone in [`process.md`](process.md) and ADR-009, then committed the M1 test changes on `m1-review` and pushed.
+
+---
+
+## Prompt 13 — Treefa, 12:51 (approval of M1)
+
+> Approve
+
+**Response:** fast-forwarded `main` to `df7e3c9` (no new commit) and pushed. Implemented milestone M2 (events, sources, matching) on the `m2-review` branch. See [`dev-journal.md`](dev-journal.md).

@@ -25,3 +25,15 @@ management:
     web:
       exposure:
         include: health,info
+
+# Event sources (docs/decisions.md ADR-003). Defaults: simulator on, real USGS feed off.
+alerts:
+  sources:
+    polling-enabled: ${ALERTS_POLLING_ENABLED:true}
+    simulator:
+      enabled: ${ALERTS_SIMULATOR_ENABLED:true}
+      interval: ${ALERTS_SIMULATOR_INTERVAL:30s}
+    usgs:
+      enabled: ${ALERTS_USGS_ENABLED:false}
+      interval: ${ALERTS_USGS_INTERVAL:5m}
+      feed-url: ${ALERTS_USGS_FEED_URL:https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson}

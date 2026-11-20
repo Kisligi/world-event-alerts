@@ -25,9 +25,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * End-to-end through the real stack: HTTP layer, service, JPA, Flyway migrations and a real
- * PostgreSQL started by Testcontainers. Each test starts with no alert rules.
+ * PostgreSQL started by Testcontainers. Each test starts with no alert rules; background event
+ * polling is off.
  */
-@SpringBootTest
+@SpringBootTest(properties = "alerts.sources.polling-enabled=false")
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class AlertApiIntegrationTest {

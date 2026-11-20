@@ -58,3 +58,26 @@ Treefa pointed out that `ApiExceptionHandler.handleInvalid` was never exercised.
 Still uncovered, on purpose:
 - `WorldEventAlertsApplication.main` (2 lines): only calls `SpringApplication.run`; it is exercised every time the app is started (smoke test above), and a unit test would only re-test Spring.
 - One branch of the `switch` in `ChannelTargetValidator`: a hidden branch the compiler adds for a `null` enum value, which cannot happen because Bean Validation rejects a missing `type` first (tested in `rejectsRequestThatBreaksOneConstraint`).
+
+---
+
+## M2 — Events and matching
+
+**Built**
+- `world_event` table (Flyway `V3`) with a unique `(source, external_id)` constraint.
+- `EventSource` interface, `SimulatedEventSource` (12-entry catalog), `UsgsEarthquakeSource` (off by default), `EventPoller` and `EventSourceConfig`.
+- `EventIngestionService`: store once, match, publish `WorldEventMatched`.
+- `AlertMatcher` with all matching rules in one class.
+- `GET /api/events` and `POST /api/admin/events` (publish a test event).
+
+**Checked before coding:** the USGS feed format, against the documentation and live data ([`planning/06-usgs-feed-check.md`](planning/06-usgs-feed-check.md)). Finding: `title` exists in live data but is not documented, so the adapter has a fallback. Claude's environment cannot reach earthquake.usgs.gov directly, so the adapter is tested against a fixture rebuilt from two real features, not against the live feed.
+
+**Problems found by tests and fixed**
+- **Inconsistent error format.** A new test expected `application/problem+json` for an out-of-range `limit` and for malformed JSON; both came back as plain JSON from Spring's default handler. Fixed by having `ApiExceptionHandler` extend `ResponseEntityExceptionHandler`. The first attempt (`spring.mvc.problemdetails.enabled=true`) made 9 existing tests fail: Boot's handler took over body validation and dropped our `errors` list, so it was reverted. Recorded in ADR-014.
+- **A meaningless assertion removed.** A draft integration test asserted that four `int` rule ids were "not null", which can never fail. Replaced by a comment; the exact `contains(quakes, anyDisaster)` check already proves the other four rules are excluded.
+- **Timestamp precision** (same issue as in M1): `WorldEvent.from` truncates `receivedAt` and `occurredAt` to microseconds, with a unit test.
+
+**Verified**
+- `./mvnw verify`: **102 tests**, 0 failures. Coverage: lines **99.4%** (327/329), branches **98.7%** (78/79).
+- Still uncovered, on purpose: `WorldEventAlertsApplication.main` and the compiler-generated `null` branch of the `switch` in `ChannelTargetValidator` (both explained under M1).
+- Manual smoke test with the simulator every 3 s: events 1–3 arrived from `SIMULATOR` and matched nothing, as expected (the only rule wanted HIGH+ disasters mentioning "earthquake", and the simulated quake was a LOW M 3.1). Event 4 published through `POST /api/admin/events` ("M 7.2 earthquake near Tokyo", CRITICAL) returned `"matchedAlertRuleIds":[1]`. `GET /api/events?limit=0` returned a 400 problem detail. [Swagger screenshot](screenshots/m2-swagger-ui.png).

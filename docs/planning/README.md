@@ -9,5 +9,6 @@ Original materials from the planning phase, kept as they were produced (ground r
 | [`03-tradeoffs-register.md`](03-tradeoffs-register.md) | First version of the trade-offs register (now [`../tradeoffs.md`](../tradeoffs.md)) |
 | [`04-version-check.md`](04-version-check.md) | Live check of Spring Boot, springdoc, React and Vite versions and Spring Boot support dates |
 | [`05-agreed-scope.md`](05-agreed-scope.md) | The agreed scope and stack, as approved. Only the title (marked approved) and the API docs row (after the springdoc check) were edited after approval |
+| [`06-usgs-feed-check.md`](06-usgs-feed-check.md) | Check of the real USGS feed format before writing the M2 adapter; source of the test fixture |
 | [`prompt-log-draft.md`](prompt-log-draft.md) | Working draft of the prompt log, written live during planning (now [`../prompt-log.md`](../prompt-log.md)) |
 | [`review-log-draft.md`](review-log-draft.md) | Working draft of the review log (now [`../review-log.md`](../review-log.md)) |

@@ -4,7 +4,7 @@ Users set up alert rules and get notified by **email** or **Slack** when somethi
 
 This is a one-day prototype built from a deliberately vague product brief. The priority is a well-documented development process: every decision, prompt, correction and shortcut is recorded in [`docs/`](docs/).
 
-> **Status: M1, backend skeleton.** The REST API for users and alert rules works against PostgreSQL. Events, notifications and the UI come in later milestones; see [Milestones](#milestones).
+> **Status: M2, events and matching.** Users manage alert rules through a REST API; simulated events (and optionally real USGS earthquakes) arrive continuously and are matched against the rules. Sending notifications (M3) and the UI (M4, M5) come next; see [Milestones](#milestones).
 
 ## The brief
 
@@ -40,7 +40,7 @@ Why these: [`docs/decisions.md`](docs/decisions.md).
 
 **Final goal (M6):** `docker compose up --build`, with Docker as the only prerequisite.
 
-**Now (M1)**, with Docker and JDK 21:
+**Now (M2)**, with Docker and JDK 21:
 
 ```bash
 # Option 1: PostgreSQL from docker compose, app from Maven
@@ -52,8 +52,9 @@ cd backend && ./mvnw spring-boot:test-run
 ```
 
 Then open:
-- Swagger UI: http://localhost:8080/swagger-ui.html ([screenshot](docs/screenshots/m1-swagger-ui.png))
+- Swagger UI: http://localhost:8080/swagger-ui.html ([screenshot](docs/screenshots/m2-swagger-ui.png))
 - Demo users: http://localhost:8080/api/users
+- Latest events (a simulated one arrives every 30 seconds): http://localhost:8080/api/events
 
 Try it:
 
@@ -65,7 +66,21 @@ curl -X POST localhost:8080/api/users/1/alerts -H 'Content-Type: application/jso
   "minSeverity": "HIGH",
   "targets": [{"type": "EMAIL", "address": "alice@example.com"}]
 }'
+
+# Publish a test event as the admin; the response lists the alert rules it matched
+curl -X POST localhost:8080/api/admin/events -H 'Content-Type: application/json' -d '{
+  "category": "DISASTER", "severity": "CRITICAL", "title": "M 7.2 earthquake near Tokyo"
+}'
 ```
+
+**Event sources** are configured with environment variables:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `ALERTS_SIMULATOR_ENABLED` | `true` | Sample news, market and disaster events, labelled `[SIMULATED]` |
+| `ALERTS_SIMULATOR_INTERVAL` | `30s` | Time between simulated events |
+| `ALERTS_USGS_ENABLED` | `false` | Real earthquakes (magnitude 4.5+, past day) from the public USGS feed; needs internet, no API key |
+| `ALERTS_USGS_INTERVAL` | `5m` | Time between USGS polls |
 
 ## How to test
 
@@ -73,7 +88,7 @@ curl -X POST localhost:8080/api/users/1/alerts -H 'Content-Type: application/jso
 cd backend && ./mvnw verify
 ```
 
-Runs unit tests, web-layer tests and integration tests (48 tests). The integration tests start a real PostgreSQL with Testcontainers, so **Docker must be running**. A coverage report is written to `backend/target/site/jacoco/index.html`. Testing rules: [`docs/process.md`](docs/process.md#testing-standard).
+Runs unit tests, web-layer tests and integration tests (102 tests). The integration tests start a real PostgreSQL with Testcontainers, so **Docker must be running**. A coverage report is written to `backend/target/site/jacoco/index.html`. Testing rules: [`docs/process.md`](docs/process.md#testing-standard).
 
 ## Milestones
 
@@ -82,8 +97,8 @@ Each milestone is one commit on `main`. A milestone is done when the code compil
 | # | Milestone | Status |
 |---|-----------|--------|
 | M0 | Docs skeleton and planning records | ✅ |
-| M1 | Backend skeleton and alert API | ✅ this commit |
-| M2 | Events and matching | ⏳ |
+| M1 | Backend skeleton and alert API | ✅ |
+| M2 | Events and matching | ✅ this commit |
 | M3 | Channels and delivery log | ⏳ |
 | M4 | User UI | ⏳ |
 | M5 | Admin UI | ⏳ |

@@ -102,6 +102,7 @@ Decisions below were made by Claude during implementation, within the approved s
 
 - **Decision:** All API errors are `application/problem+json` (Spring's `ProblemDetail`), with an extra `errors` list for field validation failures.
 - **Why:** A standard, self-describing error format supported natively by Spring; the frontend can show `detail` and `errors` without custom parsing.
+- **Amended (M2):** `ApiExceptionHandler` now extends Spring's `ResponseEntityExceptionHandler`, so Spring's own errors (malformed JSON, out-of-range query parameters, …) are problem details too. A test showed they were plain JSON before. Switching on `spring.mvc.problemdetails.enabled` was tried first and rejected: Boot's handler then took over body validation errors and dropped our `errors` list.
 
 ## ADR-015 — Schema owned by Flyway, verified by Hibernate (M1)
 
@@ -118,3 +119,25 @@ Decisions below were made by Claude during implementation, within the approved s
 
 - **Decision:** Keywords are trimmed, lower-cased (`Locale.ROOT`) and de-duplicated on save.
 - **Why:** Matching is case-insensitive (ADR-006), so storing them normalized avoids duplicates such as "Japan" and "japan" and keeps the matcher simple.
+
+## ADR-018 — Pull-based event sources with one poller (M2)
+
+- **Decision:** An `EventSource` interface with `name()`, `pollInterval()` and `poll()`. One `EventPoller` schedules every enabled source at its own interval on Spring's task scheduler. Sources are switched on or off by `alerts.sources.*` properties (simulator on, USGS off by default).
+- **Alternatives:** each source schedules itself with `@Scheduled`; push-based sources (webhooks, message queue).
+- **Why:** The real source (USGS) is a feed you poll, and the simulator fits the same shape. Error handling (a failing source or a bad event never stops the others) lives in one place and is tested once. A new source is one class plus one bean definition.
+
+## ADR-019 — Matching: database pre-filter, rules in Java (M2)
+
+- **Decision:** The database returns enabled rules for the event's category; `AlertMatcher` checks severity and keywords in Java. Keywords match as case-insensitive substrings of title or description.
+- **Alternatives:** the whole match in SQL (severity ordering on a string column, `LIKE` per keyword); a search engine.
+- **Why:** All matching rules sit in one small, fully unit-tested class. Volumes are tiny ([`tradeoffs.md`](tradeoffs.md) T13, T14).
+
+## ADR-020 — Matching announces, delivery listens (M2)
+
+- **Decision:** Ingestion publishes a `WorldEventMatched(eventId, alertRuleIds)` Spring application event and does not know about channels. M3's dispatcher will listen for it after the transaction commits.
+- **Why:** Keeps ingestion and delivery independent and separately testable. It is also the seam where a message broker could later be introduced ([`tradeoffs.md`](tradeoffs.md) T1).
+
+## ADR-021 — USGS adapter details (M2)
+
+- **Decision:** Feed `4.5_day.geojson`, polled every 5 minutes; external id = USGS feature id; severity from magnitude (< 5 LOW, < 6 MEDIUM, < 7 HIGH, ≥ 7 CRITICAL); features without id or magnitude are skipped; `title` used when present, built from magnitude and place otherwise.
+- **Why:** The format was checked against the USGS documentation and live data before writing code ([`planning/06-usgs-feed-check.md`](planning/06-usgs-feed-check.md)). `title` is in the live data but not in the documented schema, hence the fallback. The past-day 4.5+ feed gives a useful demo immediately; the feed is updated every minute, so 5 minutes is polite and still timely. The magnitude scale is our own simplification ([`tradeoffs.md`](tradeoffs.md) T16).

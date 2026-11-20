@@ -142,7 +142,8 @@ class AlertRuleControllerTest {
     @Test
     void malformedJsonReturns400() throws Exception {
         mvc.perform(post("/api/users/1/alerts").contentType(MediaType.APPLICATION_JSON).content("{\"name\": "))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("Content-Type", startsWith("application/problem+json")));
         verifyNoInteractions(service);
     }
 
