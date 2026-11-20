@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: M3.** Implemented: users and alert rules (M1); event sources, ingestion and matching (M2); notification channels, delivery and the delivery log (M3). Still planned: the UI (M4, M5) and the app container in the compose stack (M6). Each section says which. This document is updated at every milestone to match the code.
+> **Status: M4.** Implemented: users and alert rules (M1); event sources, ingestion and matching (M2); notification channels, delivery and the delivery log (M3); the user web app (M4). Still planned: the admin UI (M5) and the app container in the compose stack (M6). Each section says which. This document is updated at every milestone to match the code.
 
 ## Overview
 
@@ -79,7 +79,7 @@ sequenceDiagram
 
 Every database step runs in its own short transaction and no transaction or connection is held during a network call, so a delivery uses at most one database connection at a time ([`decisions.md`](decisions.md) ADR-023; this was not true in the first M3 version, see [`review-log.md`](review-log.md) R7). Dispatch is synchronous: the thread that ingested the event also sends the notifications ([`tradeoffs.md`](tradeoffs.md) T19).
 
-## Implemented so far (M1–M3)
+## Implemented so far (M1–M4)
 
 ### Code layout
 
@@ -244,7 +244,7 @@ erDiagram
 
 Flyway owns the schema; Hibernate runs with `ddl-auto: validate`, so the app refuses to start if entities and schema drift apart.
 
-### Tests
+### Backend tests
 
 | Test class | Kind | What it covers |
 |------------|------|----------------|
@@ -274,6 +274,52 @@ Flyway owns the schema; Hibernate runs with `ddl-auto: validate`, so the app ref
 | `DeliveryConcurrencyIntegrationTest` | `@SpringBootTest` + Testcontainers, connection pool of 2 | 4 events ingested in parallel with a slow (1 s) Slack stand-in are all stored and delivered; regression test for the pool starvation found in the M3 review |
 
 145 tests; line coverage 99.7% (573/575), branch coverage 99.1% (116/117) (JaCoCo). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
+
+### Web app (M4)
+
+A single-page React app in `frontend/` (React 19, React Router 8, TypeScript 7, built with Vite 8). It has no state library and no backend of its own: it talks only to the REST API above.
+
+```
+frontend/src/
+├── main.tsx              mounts <App> inside the router and the user context
+├── App.tsx               top bar (navigation, "Acting as" user switcher) and routes
+├── UserContext.tsx       the demo users and the selected one, remembered in localStorage
+├── useApi.ts             load-on-change hook; ignores answers that arrive after a switch
+├── format.ts             labels, date format, keyword parsing
+├── api/client.ts         fetch wrapper: JSON in and out, problem details → ApiError
+├── api/types.ts          TypeScript types mirroring the backend's JSON
+├── components/           AlertForm, AlertCard, ErrorMessage, WithUser
+├── pages/                AlertsPage (/), NotificationsPage (/notifications)
+└── test/                 fake backend for tests (fakeApi), renderApp, sample data
+```
+
+| Route | What the user can do | API calls |
+|-------|----------------------|-----------|
+| `/` My alerts | See their rules as cards; create, edit, turn on/off, delete (with an inline confirmation, no browser dialog) | `GET /api/users/{id}/alerts`, `POST …/alerts`, `PUT /api/alerts/{id}`, `DELETE /api/alerts/{id}` |
+| `/notifications` | See every notification, newest first, with status (Sent, Failed after N attempts, Skipped); select a row to read the exact message and the error | `GET /api/users/{id}/notifications`, again every 10 s |
+| any other path | Redirected to `/` | |
+
+**Who is the user?** There is no login (ADR-004). `UserContext` loads `GET /api/users`, and the "Acting as" switcher picks one; the choice is stored in `localStorage` and falls back to the first user when storage is blocked or the stored user no longer exists. Each page is keyed by the user id, so switching users discards open forms and errors.
+
+**Errors.** The backend always answers errors as problem details (ADR-014). `api/client.ts` turns them into an `ApiError` carrying `detail` and the `errors` list, and `ErrorMessage` shows both. A backend that cannot be reached shows "The server cannot be reached. Is the backend running?". The form checks only what the user can fix at a glance (name, at least one category, an address for every target); all other rules are enforced, once, by the backend.
+
+**One origin.** In development, Vite's dev server (port 5173) forwards `/api` to the backend (`BACKEND_URL`, default `http://localhost:8080`). In M6 the backend will serve the built app itself. Either way the browser sees a single origin, so no CORS configuration is needed.
+
+#### Frontend tests
+
+Tests render the real app with Testing Library in jsdom and replace only `fetch` (`test/fakeApi.ts`): each test declares what the backend answers, then checks what the user sees and which requests were sent. An unexpected request fails the test.
+
+| Test file | What it covers |
+|-----------|----------------|
+| `api/client.test.ts` | JSON request and response, 204, problem detail → `ApiError` with field errors, fallbacks for missing detail or non-JSON errors, unreachable backend, `toRequest` |
+| `format.test.ts` | keyword parsing (trim, empty, case-insensitive duplicates), date format |
+| `useApi.test.ts` | a late answer or a late failure for a previous user is ignored; error cleared after a successful reload |
+| `UserContext.test.tsx` | blocked `localStorage` still allows switching; hook outside the provider fails clearly |
+| `components/AlertForm.test.tsx` | defaults; the exact request body; each client-side check; backend and unexpected errors; editing; 1–10 targets; placeholder per channel; cancel |
+| `pages/AlertsPage.test.tsx` | first user by default; switching and remembering the user; stale stored user; create, edit, cancel, turn off (whole rule in the `PUT`), delete with confirmation; failed action; backend down; unknown path |
+| `pages/NotificationsPage.test.tsx` | rows with time, status, channel and alert; expand and collapse a message; empty state; automatic refresh every 10 s; manual refresh; user switch |
+
+45 tests; lines 100%, branches 97% (Vitest V8 coverage). What is left uncovered and why: [`dev-journal.md`](dev-journal.md).
 
 ## Domain model (full target; ✅ = implemented)
 

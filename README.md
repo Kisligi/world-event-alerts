@@ -4,7 +4,7 @@ Users set up alert rules and get notified by **email** or **Slack** when somethi
 
 This is a one-day prototype built from a deliberately vague product brief. The priority is a well-documented development process: every decision, prompt, correction and shortcut is recorded in [`docs/`](docs/).
 
-> **Status: M3, channels and delivery log.** Users manage alert rules through a REST API; simulated events (and optionally real USGS earthquakes) arrive continuously, are matched against the rules, and matching events are sent by email and Slack, with every attempt in a delivery log. The UI (M4, M5) comes next; see [Milestones](#milestones).
+> **Status: M4, user UI.** Users pick a demo user, manage their alert rules and see their notification history in a React web app. Simulated events (and optionally real USGS earthquakes) arrive continuously, are matched against the rules, and matching events are sent by email and Slack, with every attempt in a delivery log. The admin UI (M5) and the one-command run (M6) come next; see [Milestones](#milestones).
 
 ## The brief
 
@@ -26,6 +26,7 @@ Full scope: [`docs/planning/05-agreed-scope.md`](docs/planning/05-agreed-scope.m
 
 ```
 backend/         Spring Boot service (Maven, Java 21)
+frontend/        React web app (TypeScript, Vite, npm)
 docs/            All documentation, planning materials and screenshots
 infra/           Configuration for local stand-ins (WireMock stubs for Slack)
 compose.yaml     Local infrastructure: PostgreSQL, Mailpit, WireMock (the app joins in M6)
@@ -33,7 +34,7 @@ compose.yaml     Local infrastructure: PostgreSQL, Mailpit, WireMock (the app jo
 
 ## Tech stack
 
-Java 21 · Spring Boot 4.1.3 · PostgreSQL + Flyway · React 19 + TypeScript (Vite) · JUnit 5, Mockito, Testcontainers, Vitest · Docker Compose · Mailpit · WireMock
+Java 21 · Spring Boot 4.1.3 · PostgreSQL + Flyway · React 19 + React Router 8 · TypeScript 7 · Vite 8 · JUnit 5, Mockito, Testcontainers · Vitest 5 + Testing Library · Docker Compose · Mailpit · WireMock
 
 Why these: [`docs/decisions.md`](docs/decisions.md).
 
@@ -41,19 +42,23 @@ Why these: [`docs/decisions.md`](docs/decisions.md).
 
 **Final goal (M6):** `docker compose up --build`, with Docker as the only prerequisite.
 
-**Now (M3)**, with Docker and JDK 21:
+**Now (M4)**, with Docker, JDK 21 and Node.js 22.22 or newer, in three terminals:
 
 ```bash
-# Option 1: PostgreSQL, Mailpit and WireMock from docker compose, app from Maven
+# 1. PostgreSQL, Mailpit and WireMock
 docker compose up -d
+
+# 2. The backend
 cd backend && ./mvnw spring-boot:run
 
-# Option 2: no compose; the app starts its own throwaway PostgreSQL, Mailpit and WireMock
-# with Testcontainers (on random ports; `docker ps` shows them)
-cd backend && ./mvnw spring-boot:test-run
+# 3. The web app (the dev server forwards /api calls to the backend on port 8080)
+cd frontend && npm ci && npm run dev
 ```
 
+Instead of steps 1 and 2, `cd backend && ./mvnw spring-boot:test-run` starts the backend with its own throwaway PostgreSQL, Mailpit and WireMock (Testcontainers, on random ports; `docker ps` shows them).
+
 Then open:
+- **The web app: http://localhost:5173** ([alerts](docs/screenshots/m4-my-alerts.png), [new alert](docs/screenshots/m4-new-alert-form.png), [notifications](docs/screenshots/m4-notifications.png), [phone width](docs/screenshots/m4-phone.png)). Pick a demo user at the top right ("Acting as"); there is no login.
 - Swagger UI: http://localhost:8080/swagger-ui.html ([screenshot](docs/screenshots/m3-swagger-ui.png))
 - Demo users: http://localhost:8080/api/users
 - Latest events (a simulated one arrives every 15 seconds): http://localhost:8080/api/events
@@ -61,7 +66,7 @@ Then open:
 - Slack messages received by the stand-in (WireMock): http://localhost:8089/__admin/requests
 - Delivery log: http://localhost:8080/api/admin/deliveries
 
-Try it:
+Or try the API directly:
 
 ```bash
 curl -X POST localhost:8080/api/users/1/alerts -H 'Content-Type: application/json' -d '{
@@ -106,10 +111,13 @@ To see retries and a failed delivery, use a Slack target under `/services/fail/`
 ## How to test
 
 ```bash
-cd backend && ./mvnw verify
+cd backend && ./mvnw clean verify     # backend: 145 tests
+cd frontend && npm ci && npm test     # frontend: 45 tests (npm run coverage for a coverage report)
 ```
 
-Runs unit tests, web-layer tests and integration tests (145 tests). The integration tests start real PostgreSQL, Mailpit and WireMock containers with Testcontainers, so **Docker must be running**. A coverage report is written to `backend/target/site/jacoco/index.html`. Testing rules: [`docs/process.md`](docs/process.md#testing-standard).
+The backend runs unit tests, web-layer tests and integration tests. The integration tests start real PostgreSQL, Mailpit and WireMock containers with Testcontainers, so **Docker must be running**. `clean` matters after switching branches: compiled classes left in `target/` from another branch can make tests fail that pass on a clean build. Coverage reports: `backend/target/site/jacoco/index.html` and `frontend/coverage/index.html`.
+
+The frontend tests render the real app in a simulated browser (jsdom) and replace only the network: each test defines what the backend answers and checks what the user sees and which requests were sent. Testing rules: [`docs/process.md`](docs/process.md#testing-standard).
 
 ## Milestones
 
@@ -120,8 +128,8 @@ Each milestone is one commit on `main`. A milestone is done when the code compil
 | M0 | Docs skeleton and planning records | ✅ |
 | M1 | Backend skeleton and alert API | ✅ |
 | M2 | Events and matching | ✅ |
-| M3 | Channels and delivery log | ✅ this commit |
-| M4 | User UI | ⏳ |
+| M3 | Channels and delivery log | ✅ |
+| M4 | User UI | ✅ this commit |
 | M5 | Admin UI | ⏳ |
 | M6 | One-command run and final docs | ⏳ |
 

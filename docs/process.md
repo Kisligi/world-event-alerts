@@ -37,7 +37,7 @@ Set by Treefa during the M1 review ([`review-log.md`](review-log.md) R6):
 
 - Every change comes with tests, and coverage should be as high as possible.
 - **Tests must be real and meaningful**: each one checks a behaviour someone relies on (a status code, an error message, a stored value, a rule), not just that a line ran. No tests written only to raise the number.
-- Coverage is measured with JaCoCo on every `./mvnw verify` (report: `backend/target/site/jacoco/index.html`). It is reported, not enforced as a gate, so the number never becomes the goal.
+- Coverage is measured with JaCoCo on every `./mvnw verify` (report: `backend/target/site/jacoco/index.html`) and, for the frontend, with Vitest's V8 coverage (`npm run coverage`, report: `frontend/coverage/index.html`). It is reported, not enforced as a gate, so the number never becomes the goal.
 - Whatever stays uncovered is listed in [`dev-journal.md`](dev-journal.md) with the reason it is not worth a test.
 
 ### Commit message convention

@@ -206,3 +206,35 @@ Decision card, 14:18 — "Which memory and resource findings should I fix on m3-
 
 **Response:** fixed findings 1–3 with tests and recorded 4–5 as trade-offs T25 and T26. See [`dev-journal.md`](dev-journal.md).
 
+---
+
+## Prompt 18 — Treefa, 14:29 (approval of the M3 review fixes)
+
+> Approve commit on m3-review.
+
+**Response:** committed the fixes as `a6717cc` on `m3-review` and pushed it; `main` stayed at `0d86f82`.
+
+---
+
+## Prompt 19 — Treefa, 14:38
+
+> Run again the tests on the current m3-review branch. And fix the issues.
+
+**Response:** a fresh clone of `m3-review` (`a6717cc`) passed `./mvnw verify` (145 tests), and the new tests passed 5 more times in a row. Asked Treefa for the failing output.
+
+---
+
+## Prompt 20 — Treefa, 14:54
+
+> The issue was caused by a stale local target/ folder. After a clean build, everything works for me locally.
+
+**Response:** no code change. The README now uses `./mvnw clean verify` and explains why (added with M4).
+
+---
+
+## Prompt 21 — Treefa, 14:58 (approval of M3)
+
+> I approve M3.
+
+**Response:** fast-forwarded `main` to `a6717cc` (no new commit) and pushed. Implemented milestone M4 (user UI) on the `m4-review` branch. See [`dev-journal.md`](dev-journal.md).
+

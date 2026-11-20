@@ -187,3 +187,22 @@ Decisions below were made by Claude during implementation, within the approved s
 - **Decision:** Creating a rule fails with 400 once the user has `alerts.rules.max-per-user` rules (default 50, env `ALERTS_MAX_RULES_PER_USER`).
 - **Alternatives:** no limit; stream or page rules during matching; match in SQL.
 - **Why:** Every event loads all enabled rules of its category into memory, and delivery plans one message per matched target, so memory per event grows with the total number of rules. Without login (T3) anyone could create rules in a loop. A cap keeps the worst case bounded (users × 50 rules × 10 targets) for the cost of one `COUNT` query. Matching at scale is still [`tradeoffs.md`](tradeoffs.md) T13. Found in the memory review ([`review-log.md`](review-log.md) R7).
+
+## ADR-030 — Frontend versions (M4)
+
+- **Decision:** React 19.3.1, React Router 8.5.2, TypeScript 7.0.2, Vite 8.3.8 with `@vitejs/plugin-react` 6.3.0, Vitest 5.1.1, Testing Library (React 16.3.3, jest-dom 7.0.1), jsdom 31.0.1. Exact versions in `package.json`, locked by `package-lock.json`. Node.js 22.22 or newer for development (the strictest `engines` range among these, jsdom's).
+- **How chosen:** the current release of each package was looked up on the npm registry on 2026-11-20 together with its release date and peer dependencies (Vitest 5 supports Vite 8; the React plugin needs Vite 8; Testing Library supports React 19). Day-one releases were avoided, as for Spring Boot (ADR-010): jest-dom 8.0.0 came out the day before, so 7.0.1 is used.
+- **Checked rather than assumed:** React Router 8 was released after Claude's training data. Its exports (`BrowserRouter`, `Routes`, `Route`, `NavLink`, `Navigate`, `MemoryRouter`) were read from the installed package's type definitions before use, and the build and tests confirm them. TypeScript 7 (7.0.2, released July 2026) type-checks the whole app, tests included, in strict mode.
+
+## ADR-031 — Frontend structure: plain hooks, one fetch wrapper (M4)
+
+- **Decision:** No state library (as agreed in ADR-011). Server data is loaded per page with a small `useApi(load, key)` hook; the selected demo user lives in a React context. All HTTP goes through `api/client.ts`, which turns problem details into an `ApiError`. Routing with React Router's declarative `<Routes>`.
+- **Alternatives:** TanStack Query (caching, retries, polling built in); Redux Toolkit; React Router's data routers (loaders and actions).
+- **Why:** Two pages with server-owned data. A 40-line hook covers loading, errors, reload and the one subtle case: an answer for the previous user arriving after a switch must be ignored (tested). TanStack Query would be the first thing to add if the app grew (caching across pages, background refetch).
+
+## ADR-032 — Frontend tests replace only the network (M4)
+
+- **Decision:** Page tests render the whole app (`renderApp`: router, user context, pages) and replace `fetch` with a fake backend declared per test (`fakeApi`). Assertions are about what the user sees (roles and accessible names, as Testing Library recommends) and which requests were sent with which bodies.
+- **Alternatives:** mocking the API module per test; a mock-server library (MSW); browser end-to-end tests in the suite.
+- **Why:** Tests exercise the real components, hooks, routing and the real API client together, so they break when behaviour breaks, not when code is moved. A fake `fetch` needs no extra dependency. An end-to-end check in a real browser against the real backend was run by hand for M4 (screenshots); automating it is [`tradeoffs.md`](tradeoffs.md) T29.
+

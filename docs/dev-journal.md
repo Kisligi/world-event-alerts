@@ -133,3 +133,36 @@ Treefa asked for a 15 s simulator interval and a review for memory leaks and out
 
 **Coverage after the review round:** 145 tests. Lines **99.7%** (573/575), branches **99.1%** (116/117); the same two intentional gaps.
 
+---
+
+## M4 — User UI
+
+**Built**
+- `frontend/`: a React 19 single-page app with Vite 8, React Router 8 and TypeScript 7 (versions and why: ADR-030).
+- "Acting as" user switcher, remembered in the browser (no login, ADR-004).
+- **My alerts:** rules as cards; create, edit, turn on/off and delete (inline confirmation instead of a browser dialog).
+- **Notifications:** history with status, channel and alert; select a row to read the exact message and error; refreshes every 10 s.
+- Backend errors (problem details) shown with their field errors; a clear message when the backend is down.
+- The Vite dev server forwards `/api` to the backend, so the browser sees one origin (no CORS).
+
+**Checked before coding:** current versions, release dates, peer dependencies and Node.js requirements of every package on the npm registry. React Router 8 is newer than Claude's training data, so its exports were read from the installed type definitions before use. jest-dom 8.0.0 was a day old, so 7.0.1 is used.
+
+**Problems found and fixed**
+- **Type checking failed on the first run:** the CSS import and `process.env` in `vite.config.ts` had no types. Fixed with `vite/client` types and `@types/node` 22 (matching the Node.js version), rather than excluding the config from type checking.
+- **A dead end when the backend is down.** While writing the "backend down" test, Claude noticed that the page said "Loading users…" forever while the error appeared only in the top bar. The page now shows the error, and the top bar hides the user switcher until users are loaded (`WithUser`).
+- **Phone width:** the "My alerts" link wrapped onto two lines; fixed with `white-space: nowrap` ([screenshot](screenshots/m4-phone.png)).
+
+**Verified**
+- `npm test`: **45 tests**, 0 failures; `tsc --noEmit` (strict) clean; `npm run build` succeeds (270 kB JavaScript, 86 kB gzipped).
+- Coverage (Vitest V8): statements and lines **100%**, branches **97.1%**. Uncovered on purpose (4 branches, all defensive):
+  - `AlertForm`: the empty-address fallback when no default email is given (every new form gets the user's email); and wrapping a non-`Error` rejection (the API client only throws `Error`s).
+  - `AlertsPage`: saving while no form is open (the save button only exists inside an open form); and the same non-`Error` wrapping.
+- Backend unchanged: 145 tests, as at M3.
+- **Manual end-to-end run in a real browser** (Playwright, Chromium) against the backend, compose stack and Vite dev server:
+  - Alice's three alerts rendered ([screenshot](screenshots/m4-my-alerts.png)).
+  - Created "Floods in Europe" through the form, with an email and a Slack target ([screenshot](screenshots/m4-new-alert-form.png)); it appeared in the list.
+  - A Slack target "not-a-url" showed the backend's message "SLACK target must be an http(s) webhook URL: not-a-url".
+  - Turned "Everything critical" on.
+  - Notifications showed two sent and one "Failed after 3 attempts", with the message and "simulated Slack outage" error when opened ([screenshot](screenshots/m4-notifications.png)).
+  - Switched to Bob: empty history. The only browser console error was the expected 400 from the invalid target.
+
