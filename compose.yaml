@@ -39,10 +39,10 @@ services:
       - ./infra/wiremock/mappings:/home/wiremock/mappings:ro
 
   # The app: API, background event sources and the web app, all on http://localhost:8080.
+  # It uses the network of slack-standin-link below, so its port is published there.
   app:
     build: .
-    ports:
-      - "8080:8080"
+    network_mode: service:slack-standin-link
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/alerts
       MAIL_HOST: mailpit
@@ -51,6 +51,9 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+      slack-standin-link:
+        condition: service_started
+        restart: true   # rejoin the forwarder's network whenever Compose restarts or replaces it
     # The JVM sizes its heap from this limit (75%, see Dockerfile).
     deploy:
       resources:
@@ -62,16 +65,17 @@ services:
       timeout: 3s
       retries: 30
 
-  # Inside the app container "localhost" is the container itself, so a Slack target such as
+  # Inside a container "localhost" is the container itself, so a Slack target such as
   # http://localhost:8089/services/demo (the address the README and the web app suggest) would
-  # not reach WireMock. This forwarder shares the app container's network and passes its
-  # localhost:8089 on to WireMock, so the same address works from the app and from the browser.
+  # not reach WireMock from the app. This small forwarder owns the network that the app joins
+  # and passes localhost:8089 on to WireMock, so the same address works from the app and from
+  # the browser. It owns the network (not the app) so that restarting the app keeps it working,
+  # like the network of a Kubernetes pod (docs/decisions.md ADR-035).
   slack-standin-link:
     image: alpine/socat:1.8.1.1
-    network_mode: service:app
     command: TCP-LISTEN:8089,fork,reuseaddr TCP:wiremock:8080
+    ports:
+      - "8080:8080"   # the app
     depends_on:
-      app:
-        condition: service_started
       wiremock:
         condition: service_started

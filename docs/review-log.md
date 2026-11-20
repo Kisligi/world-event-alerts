@@ -69,4 +69,4 @@ Times are UTC on 2026-11-20.
   1. The `Dockerfile` removes carriage returns from `mvnw` and the wrapper settings and makes `mvnw` executable before running it, whatever the checkout did.
   2. A new `.gitattributes` keeps `mvnw` and shell scripts at Linux line endings in every checkout, and leaves `mvnw.cmd` as it is (it is stored with Windows line endings already).
 
-  The same converted copy then built and the app started and served its pages. Not verified by Claude on Windows itself.
+  The same converted copy then built and the app started and served its pages. Claude could not test on Windows; Treefa confirmed at 17:16 that the one-command startup works there and approved M6.

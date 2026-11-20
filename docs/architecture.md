@@ -403,7 +403,7 @@ If step 3 is forgotten, nothing crashes: deliveries to `TEAMS` targets are recor
 flowchart LR
     BROWSER[Browser]
     subgraph Compose["docker compose"]
-        subgraph AppNet["app container network"]
+        subgraph AppNet["network owned by slack-standin-link (publishes :8080)"]
             APP["app<br/>Spring Boot + built web app<br/>:8080, memory limit 1 GB"]
             LINK["slack-standin-link<br/>socat, localhost:8089"]
         end
@@ -427,7 +427,7 @@ flowchart LR
 
 Spring Boot serves `index.html` for `/` and the JavaScript and CSS files from `static/`. `WebAppController` forwards the web app's other routes (`/notifications`, `/admin`, `/admin/{tab}`) to `index.html`, so reloading a page or opening a link works. The routes are listed rather than "everything unknown", so an unknown `/api/...` path is still a 404 problem detail.
 
-**The Slack stand-in link** (ADR-035). Users enter Slack addresses such as `http://localhost:8089/services/demo`, which is where WireMock is on their machine. Inside the app container, `localhost` is the container itself. A small `socat` container shares the app container's network and forwards its `localhost:8089` to WireMock, so the same address works from the app and from the browser, and nothing in the code knows about the demo.
+**The Slack stand-in link** (ADR-035). Users enter Slack addresses such as `http://localhost:8089/services/demo`, which is where WireMock is on their machine. Inside the app container, `localhost` is the container itself. A small `socat` container forwards `localhost:8089` to WireMock, and the app joins that container's network (so the app's port 8080 is published by it), the way containers share one network in a Kubernetes pod. The same address therefore works from the app and from the browser, and nothing in the code knows about the demo. The forwarder owns the network, not the app, so restarting or rebuilding the app keeps Slack working; if the forwarder itself is restarted, Compose restarts the app with it.
 
 **Configuration:** compose sets only `DB_URL` and `MAIL_HOST` (the service names); everything else uses the defaults in `application.yaml` and can be overridden with the environment variables listed in the [README](../README.md#how-to-run). The database has no volume, so `docker compose down` resets the demo ([`tradeoffs.md`](tradeoffs.md) T34).
 

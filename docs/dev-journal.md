@@ -220,3 +220,20 @@ Treefa asked for a 15 s simulator interval and a review for memory leaks and out
 Treefa's first run on Windows failed: `./mvnw: not found` in the image build. The cause was Windows line endings in `mvnw` from the Git checkout; this is exactly the kind of difference the Linux-only check above could not catch. Details and the fix: [`review-log.md`](review-log.md) R8.
 
 **Verified:** a copy of the repository with every text file converted to Windows line endings (and `mvnw` without its executable bit) reproduced the error with the old `Dockerfile` and built with the new one; the resulting image started healthy and served `/`, `/admin/events` and `/api/users`. `git add --renormalize` with the new `.gitattributes` changes no stored file. Backend and frontend code are unchanged, so their test results above still apply.
+
+**Confirmed on Windows** by Treefa (17:16): `docker compose up --build` works and the app runs as before. M6 approved; `main` fast-forwarded to `93f4e57`.
+
+## Final check (after M6)
+
+Treefa asked for whatever tests were needed to bring the project to its final state. Everything was checked on a fresh clone of `main` (`93f4e57`) from GitHub, not on the working copy.
+
+**Checked**
+- **History:** 10 commits, all by Kisligi with the agreed `Co-Authored-By` trailer and no session links. A scan of every commit for keys, tokens, private keys, Slack webhook URLs and `.env` files found only the documented demo database password (`alerts`) and the Maven wrapper's empty credential variables.
+- **Backend:** `./mvnw clean verify`: 158 tests, 0 failures; line coverage 99.7%, branch 99.2%.
+- **Frontend:** `npm ci`, type check, `npm test` with coverage (56 tests, lines 100%, branches 98.2%) and the production build.
+- **Image and stack:** image built with `--no-cache` (with the sandbox proxy added, as in M6), stack started with `docker compose up`.
+- **The walkthrough, automated:** a Playwright script followed [`walkthrough.md`](walkthrough.md) step by step in Chromium, using only the web app, and checked Mailpit and WireMock through their APIs: 23 of 23 checks passed. Among them: the form's defaults, the backend's message for an invalid Slack address, the email and the exact Slack JSON, Bob's failing webhook (the publish took about 3.3 s, the two retry waits) while his email still went out, the skipped Slack delivery while the channel was off, Swagger UI, a reloaded deep link, no horizontal scrolling at phone width, and no console errors except the expected 400. After `docker compose down` and `up` the data was gone, as documented (T34).
+
+**Found and fixed: Slack stopped working after restarting the app.** After `docker compose restart app` every Slack delivery failed with `ConnectException`, because the forwarder was still attached to the network of the app container that had stopped. `restart: true` on the forwarder did not help. The forwarder now owns the network and the app joins it (ADR-035, amended). Slack deliveries were then checked after each of: a fresh start, restarting the app, recreating the app, restarting the forwarder, and `docker compose stop` followed by `up`. All sent. Recreating only the forwarder still breaks the app until the next `docker compose up`, which is recorded in the ADR. The walkthrough script then passed again on a fresh stack (23 of 23).
+
+**Not checked here:** the unchanged `Dockerfile` without the sandbox proxy, Windows and macOS (Treefa confirmed Windows for M6, before this change to `compose.yaml`), and the optional real USGS feed from inside the container (this sandbox's containers have no direct internet access).

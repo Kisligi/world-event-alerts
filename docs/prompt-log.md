@@ -339,3 +339,21 @@ What's next:
 ```
 
 **Response:** reproduced the error with Windows line endings in `mvnw`, fixed it in the `Dockerfile` and with a `.gitattributes` file, and asked for approval to commit the fix on `m6-review`. See [`review-log.md`](review-log.md) R8.
+
+## Prompt 29 — Treefa, 17:05 (approval to commit and push the Windows fix)
+
+> You can commit this fix on m6-review and push it.
+
+**Response:** committed the fix on `m6-review` (`93f4e57`) and pushed it; `main` stayed at `51a3448`.
+
+## Prompt 30 — Treefa, 17:16 (approval of M6)
+
+> One-command startup works now, and everything still runs fine. Approved.
+
+**Response:** fast-forwarded `main` to `93f4e57` (no new commit) and pushed. Prepared the last documentation update (Prompts 29 and 30, the Windows confirmation), to go through the same approval as every other commit.
+
+## Prompt 31 — Treefa, 17:25 (final check)
+
+> Okay, I've tested it locally and everything looks good. Please run whatever tests you think are necessary to get this to its final state, and make sure everything works as expected.
+
+**Response:** checked a fresh clone of `main` end to end (history scan, both test suites, image, stack, the walkthrough automated in a browser). Found and fixed one problem: Slack stopped working after restarting the app container. Asked for approval to commit the fix and these documentation updates. See [`dev-journal.md`](dev-journal.md#final-check-after-m6).
