@@ -1,6 +1,6 @@
 # Local infrastructure for World Event Alerts.
-# M1: PostgreSQL only. Later milestones add the app, Mailpit and the Slack stand-in,
-# so that `docker compose up --build` starts everything.
+# M3: PostgreSQL, Mailpit (test SMTP server + web inbox) and WireMock (Slack stand-in).
+# M6 adds the app itself, so that `docker compose up --build` starts everything.
 #
 # The credentials below are demo values for a throwaway local database, not secrets.
 services:
@@ -17,3 +17,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Catches every email the app sends. Web inbox: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # web inbox and API
+
+  # Stands in for Slack incoming webhooks. Any POST to /services/... returns 200 "ok";
+  # /services/fail/... returns 500 to demonstrate retries. Recorded requests:
+  # http://localhost:8089/__admin/requests
+  wiremock:
+    image: wiremock/wiremock:3.13.2
+    ports:
+      - "8089:8080"
+    volumes:
+      - ./infra/wiremock/mappings:/home/wiremock/mappings:ro

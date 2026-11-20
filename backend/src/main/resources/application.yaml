@@ -15,6 +15,10 @@ spring:
       ddl-auto: validate
   flyway:
     locations: classpath:db/migration
+  # Outgoing mail. Defaults point to Mailpit (local test SMTP server, web inbox on port 8025).
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
 
 springdoc:
   swagger-ui:
@@ -37,3 +41,11 @@ alerts:
       enabled: ${ALERTS_USGS_ENABLED:false}
       interval: ${ALERTS_USGS_INTERVAL:5m}
       feed-url: ${ALERTS_USGS_FEED_URL:https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson}
+  channels:
+    email:
+      from: ${ALERTS_EMAIL_FROM:World Event Alerts <alerts@example.com>}
+  # Retries per delivery (docs/decisions.md ADR-007): 3 attempts, waiting 1s then 2s.
+  delivery:
+    max-attempts: ${ALERTS_DELIVERY_MAX_ATTEMPTS:3}
+    initial-backoff: ${ALERTS_DELIVERY_INITIAL_BACKOFF:1s}
+    multiplier: 2

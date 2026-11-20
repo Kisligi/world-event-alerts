@@ -169,3 +169,19 @@ Spring Boot line: **Spring Boot 4.1.3**.
 > Approve
 
 **Response:** fast-forwarded `main` to `df7e3c9` (no new commit) and pushed. Implemented milestone M2 (events, sources, matching) on the `m2-review` branch. See [`dev-journal.md`](dev-journal.md).
+
+---
+
+## Prompt 14 — Treefa, 13:06 (approval to push the M2 review branch)
+
+> Approve, you can push a m2-review branch.
+
+**Response:** committed M2 on `m2-review` and pushed it; `main` stayed at `df7e3c9`.
+
+---
+
+## Prompt 15 — Treefa, 13:18 (approval of M2)
+
+> Approve.
+
+**Response:** fast-forwarded `main` to `0d86f82` (no new commit) and pushed. Implemented milestone M3 (channels, delivery, delivery log) on the `m3-review` branch. See [`dev-journal.md`](dev-journal.md).

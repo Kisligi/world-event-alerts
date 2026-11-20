@@ -1,0 +1,32 @@
+{
+  "mappings": [
+    {
+      "name": "Slack incoming webhook stand-in: accepts any message, answers like Slack",
+      "priority": 10,
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/services/.*",
+        "headers": { "Content-Type": { "contains": "application/json" } },
+        "bodyPatterns": [ { "matchesJsonPath": "$.text" } ]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "text/plain" },
+        "body": "ok"
+      }
+    },
+    {
+      "name": "Broken webhook for demos and tests: any URL under /services/fail/ returns 500",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/services/fail/.*"
+      },
+      "response": {
+        "status": 500,
+        "headers": { "Content-Type": "text/plain" },
+        "body": "simulated Slack outage"
+      }
+    }
+  ]
+}

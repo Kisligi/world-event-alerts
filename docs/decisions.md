@@ -141,3 +141,41 @@ Decisions below were made by Claude during implementation, within the approved s
 
 - **Decision:** Feed `4.5_day.geojson`, polled every 5 minutes; external id = USGS feature id; severity from magnitude (< 5 LOW, < 6 MEDIUM, < 7 HIGH, ≥ 7 CRITICAL); features without id or magnitude are skipped; `title` used when present, built from magnitude and place otherwise.
 - **Why:** The format was checked against the USGS documentation and live data before writing code ([`planning/06-usgs-feed-check.md`](planning/06-usgs-feed-check.md)). `title` is in the live data but not in the documented schema, hence the fallback. The past-day 4.5+ feed gives a useful demo immediately; the feed is updated every minute, so 5 minutes is polite and still timely. The magnitude scale is our own simplification ([`tradeoffs.md`](tradeoffs.md) T16).
+
+## ADR-022 — The delivery log is the de-duplication record (M3)
+
+- **Decision:** One `delivery` row per (event, alert rule, channel type, address), backed by a unique constraint. The dispatcher creates the row before sending; if it already exists (or the insert hits the constraint), nothing is sent. The same row then records status (`PENDING`, `SENT`, `FAILED`, `SKIPPED`), attempts, last error and the exact subject and body.
+- **Alternatives:** a separate "sent" table or cache for dedup and a separate log; dedup on (event, user) only.
+- **Why:** One table answers both "was this already sent?" and "what happened?", so they can never disagree. Keying on the target (not the user) means a user with two Slack channels gets both, but never the same message twice on one of them (ADR-007).
+
+## ADR-023 — Each dispatch step in its own transaction (M3)
+
+- **Decision:** `DeliveryDispatcher` listens with `@TransactionalEventListener(fallbackExecution = true)`, so it runs after the ingestion transaction commits (or immediately when there is none). Reading the plan, creating a delivery and saving its outcome each run in a new transaction (`REQUIRES_NEW`). Network calls happen outside any transaction.
+- **Alternatives:** plain `@EventListener` inside the ingestion transaction; one transaction around the whole dispatch.
+- **Why:** An event that rolls back never notifies anyone. No database transaction or connection is held while waiting for SMTP, Slack or retry back-off. `REQUIRES_NEW` is required, not a style choice: after commit, the finished transaction's resources are still bound to the thread, and a plain repository call would join it and silently never commit. Spring's documentation recommends `REQUIRES_NEW` for this; `DeliveryIntegrationTest` confirms the rows are committed ([`dev-journal.md`](dev-journal.md)).
+
+## ADR-024 — Synchronous dispatch with in-memory retries (M3)
+
+- **Decision:** Deliveries are sent one after another on the ingesting thread. Each gets up to 3 attempts, waiting 1 s and then 2 s (`alerts.delivery.*`, overridable by environment variables). The waiting is behind a small `Sleeper` interface so unit tests run without real delays.
+- **Alternatives:** an `@Async` worker pool; an outbox table polled by a worker; a message broker (Option C).
+- **Why:** Simplest correct behaviour that meets ADR-007, and easy to reason about and test. The cost (a failing channel delays the caller by about 3 s) is recorded in [`tradeoffs.md`](tradeoffs.md) T19 together with the fix; restart safety is T7.
+
+## ADR-025 — Delivery history survives rule deletion (M3)
+
+- **Decision:** `delivery.alert_rule_id` is `ON DELETE SET NULL` and the rule's name is copied into `alert_rule_name`. Deliveries are deleted only with their event.
+- **Why:** The delivery log is the user's notification history and the admin's audit trail; deleting a rule should not rewrite what was sent. The copied name keeps old entries readable.
+
+## ADR-026 — Global channel switch as data, defaulting to on (M3)
+
+- **Decision:** A `channel_setting` row per channel type, seeded on by `V4`, changed with `PUT /api/admin/channels/{type}`. A missing row counts as enabled. A delivery for a switched-off channel is recorded as `SKIPPED` with the reason, not silently dropped. `GET /api/admin/channels` also reports whether each type has an implementation.
+- **Why:** The admin can see that a message *would* have gone out. Defaulting to on means a newly added channel works even before its row is seeded; the `implemented` flag shows a type that exists in the enum but has no channel bean (that delivery is recorded as `FAILED`, with 0 attempts).
+
+## ADR-027 — Outgoing HTTP: HTTP/1.1 with timeouts (M3)
+
+- **Decision:** All `RestClient`s (Slack, USGS) use the JDK `HttpClient` forced to HTTP/1.1, with a 5 s connect timeout and a 10 s read timeout (`HttpClientConfig`).
+- **Why:** With defaults, the JDK client tried to upgrade plain-`http` connections to HTTP/2 (h2c) and the WireMock Slack stand-in reset the stream, so every Slack message failed with "Received RST_STREAM: Stream cancelled". Slack webhooks do not need HTTP/2. Timeouts were missing too: a hanging webhook would have blocked delivery indefinitely (T19 makes that worse, not better).
+
+## ADR-028 — Local stand-ins: Mailpit and WireMock, shared by tests and compose (M3)
+
+- **Decision:** Email goes over SMTP to Mailpit (`axllent/mailpit:v1.34.0`); Slack webhooks go to WireMock (`wiremock/wiremock:3.13.2`). The WireMock stubs live in `infra/wiremock/mappings/` and are used both by `compose.yaml` and by the Testcontainers setup in the tests. `/services/...` returns 200; `/services/fail/...` returns 500 to show retries.
+- **Why:** The app talks to them exactly as it would to a real SMTP server and real Slack, with no code switches; only configuration differs. One mapping file means tests and the manual demo behave the same. Image versions are pinned for repeatable runs.

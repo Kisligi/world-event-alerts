@@ -81,3 +81,32 @@ Still uncovered, on purpose:
 - `./mvnw verify`: **102 tests**, 0 failures. Coverage: lines **99.4%** (327/329), branches **98.7%** (78/79).
 - Still uncovered, on purpose: `WorldEventAlertsApplication.main` and the compiler-generated `null` branch of the `switch` in `ChannelTargetValidator` (both explained under M1).
 - Manual smoke test with the simulator every 3 s: events 1–3 arrived from `SIMULATOR` and matched nothing, as expected (the only rule wanted HIGH+ disasters mentioning "earthquake", and the simulated quake was a LOW M 3.1). Event 4 published through `POST /api/admin/events` ("M 7.2 earthquake near Tokyo", CRITICAL) returned `"matchedAlertRuleIds":[1]`. `GET /api/events?limit=0` returned a 400 problem detail. [Swagger screenshot](screenshots/m2-swagger-ui.png).
+
+---
+
+## M3 — Channels and delivery log
+
+**Built**
+- `delivery` and `channel_setting` tables (Flyway `V4`). The unique key on (event, rule, channel type, address) is the de-duplication (ADR-022).
+- `NotificationChannel` interface with `EmailChannel` (SMTP) and `SlackChannel` (incoming-webhook JSON). Global channel switches with `GET`/`PUT /api/admin/channels`.
+- `DeliveryDispatcher`: listens for `WorldEventMatched` after commit, creates a delivery per target, skips switched-off channels, sends with up to 3 attempts (1 s, 2 s back-off), records the outcome.
+- `NotificationFormatter`: one subject and plain-text body per message, ending with the rule that caused it.
+- `GET /api/users/{id}/notifications` (user history) and `GET /api/admin/deliveries?status=` (admin log).
+- `compose.yaml` now also starts Mailpit and WireMock. The WireMock stubs live in `infra/wiremock/mappings/` and are shared with the tests (ADR-028).
+- A worked "add a Teams channel" example in [`architecture.md`](architecture.md#worked-example-adding-a-microsoft-teams-channel).
+
+**Problems found and fixed**
+- **Designed around a known Spring pitfall: writes after commit.** The dispatcher runs after the ingestion transaction commits, but that transaction's resources can still be bound to the thread, so plain repository calls would join the finished transaction and their writes would be silently lost. Spring's documentation for after-commit callbacks recommends `REQUIRES_NEW` for this case (Claude's knowledge, not re-checked online today). Every step therefore runs in a new transaction from the first version, which also keeps transactions closed during network calls (ADR-023). `DeliveryIntegrationTest` proves the rows really are committed.
+- **Every Slack message failed with "Received RST_STREAM: Stream cancelled".** The JDK HTTP client tried to upgrade plain `http` to HTTP/2 (h2c) and WireMock reset the stream. Fixed by forcing HTTP/1.1 for all `RestClient`s, adding 5 s connect and 10 s read timeouts at the same time; there were none before (ADR-027).
+- **An exception without a message would have been logged as "null".** Found by looking at the one uncovered branch (`markFailed` with a null error). Instead of testing the null check, the dispatcher now records the exception type in that case, with a test, and the null check was removed.
+
+**Verified**
+- `./mvnw verify`: **138 tests**, 0 failures. Coverage: lines **99.6%** (566/568), branches **99.1%** (114/115). Uncovered on purpose: the same two items as in M1 and M2.
+- `DeliveryIntegrationTest` runs against real PostgreSQL, Mailpit and WireMock containers: it reads the email back from Mailpit's API and the Slack request from WireMock's request journal.
+- Manual smoke test with `docker compose up -d` and the packaged jar:
+  - Alice's rule "Major earthquakes" with an email and a Slack target, and Bob's rule with a Slack target on `/services/fail/demo`.
+  - Published "M 7.2 earthquake near Tokyo" (CRITICAL): Alice's email arrived in Mailpit ([screenshot](screenshots/m3-mailpit-email.png)) and WireMock recorded one Slack POST with 200. Bob's webhook got 3 POSTs with 500, and the delivery log shows `FAILED`, 3 attempts, "Slack webhook call failed: 500 Internal Server Error: "simulated Slack outage"".
+  - Switched Slack off: the next event was logged as `SKIPPED` ("Channel SLACK is switched off by the admin") for Slack, while email was still sent.
+  - A simulated CRITICAL earthquake also reached Alice's inbox on its own, so the simulator → matching → delivery path works without the admin endpoint.
+  - `GET /api/users/99/notifications` → 404 problem detail. [Swagger screenshot](screenshots/m3-swagger-ui.png).
+- **Observed and recorded as a trade-off:** with the broken webhook, `POST /api/admin/events` took 3.1 s instead of ~60 ms, because the retries run on the request thread (T19).
